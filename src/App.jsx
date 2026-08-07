@@ -42,7 +42,40 @@ export default function MultiStepDbDesigner() {
     scenario: "School Computer Lab"
   });
 
-  const [tables, setTables] = useState([]);
+  const [tables, setTables] = useState([
+    {
+      id: "t_students",
+      name: "Students",
+      x: 60,
+      y: 60,
+      fields: [
+        { id: "f1", name: "ID", type: "Character", pk: true, fk: false, refTable: null, refField: null },
+        { id: "f2", name: "Name", type: "Text", pk: false, fk: false, refTable: null, refField: null },
+        { id: "f3", name: "Class", type: "Text", pk: false, fk: false, refTable: null, refField: null },
+      ]
+    },
+    {
+      id: "t_borrowing",
+      name: "Borrowing",
+      x: 350,
+      y: 60,
+      fields: [
+        { id: "f4", name: "ID_Borrowing", type: "Character", pk: true, fk: false, refTable: null, refField: null },
+        { id: "f5", name: "Books_ID", type: "Character", pk: false, fk: true, refTable: "t_books", refField: "f7" },
+        { id: "f6", name: "Students_ID", type: "Character", pk: false, fk: true, refTable: "t_students", refField: "f1" },
+      ]
+    },
+    {
+      id: "t_books",
+      name: "Books",
+      x: 670,
+      y: 60,
+      fields: [
+        { id: "f7", name: "Books_ID", type: "Character", pk: true, fk: false, refTable: null, refField: null },
+        { id: "f8", name: "Book_Name", type: "Text", pk: false, fk: false, refTable: null, refField: null },
+      ]
+    }
+  ]);
 
   const [selected, setSelected] = useState(null);
   const [sqlOpen, setSqlOpen] = useState(false);
@@ -50,8 +83,9 @@ export default function MultiStepDbDesigner() {
   const [isExporting, setIsExporting] = useState(false);
   
   const canvasRef = useRef(null);
+  const canvasInnerRef = useRef(null);
   const dragRef = useRef(null);
-  const counter = useRef(1);
+  const counter = useRef(4);
 
   const [explanations, setExplanations] = useState({
     threeTablesBenefit: "",
@@ -167,6 +201,10 @@ export default function MultiStepDbDesigner() {
           if (ti === -1) return;
           out.push({
             id: `${f.id}-${f.refField}`,
+            fromTable: t.name,
+            fromField: f.name,
+            toTable: target.name,
+            toField: target.fields[ti]?.name,
             from: fieldPos(t, i),
             to: fieldPos(target, ti),
             active: selected === t.id || selected === target.id,
@@ -177,8 +215,8 @@ export default function MultiStepDbDesigner() {
     return out;
   }, [tables, selected]);
 
-  const canvasW = Math.max(1200, ...tables.map((t) => t.x + TABLE_W + 160));
-  const canvasH = Math.max(700, ...tables.map((t) => t.y + tableHeight(t) + 160));
+  const canvasW = Math.max(1050, ...tables.map((t) => t.x + TABLE_W + 100));
+  const canvasH = Math.max(550, ...tables.map((t) => t.y + tableHeight(t) + 100));
 
   const buildSql = () =>
     tables
@@ -236,13 +274,15 @@ ${[...lines, ...fks].join(",\n")}
       const margin = 15;
       let y = margin;
 
+      // Header Title
       doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
       doc.setTextColor(46, 42, 92);
       doc.text("Mid Term Test: Database Design Report", margin, y);
       y += 8;
 
-      doc.setFontSize(11);
+      // Student Info
+      doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(80, 80, 80);
       doc.text(`Full Name: ${studentInfo.name}  |  Class: ${studentInfo.class}  |  Scenario: ${studentInfo.scenario}`, margin, y);
@@ -252,43 +292,69 @@ ${[...lines, ...fks].join(",\n")}
       doc.line(margin, y, pageWidth - margin, y);
       y += 8;
 
-      if (canvasRef.current) {
+      // Render Database Schema Canvas as Image
+      const targetElement = canvasInnerRef.current || canvasRef.current;
+      if (targetElement) {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.setTextColor(46, 42, 92);
-        doc.text("Database Schema Diagram:", margin, y);
+        doc.text("Database Schema Diagram & Relations:", margin, y);
         y += 6;
 
-        const canvasElement = canvasRef.current;
-        const canvasImage = await html2canvas(canvasElement, {
+        const canvasImage = await html2canvas(targetElement, {
           scale: 2,
           useCORS: true,
-          backgroundColor: "#332E68"
+          backgroundColor: "#332E68",
+          scrollX: 0,
+          scrollY: 0,
+          width: canvasW,
+          height: canvasH,
+          windowWidth: canvasW,
+          windowHeight: canvasH
         });
         const imgData = canvasImage.toDataURL("image/png");
         
-        const imgWidth = pageWidth - (margin * 2);
-        const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
+        const maxCanvasWidth = pageWidth - (margin * 2);
+        const imgHeight = (canvasImage.height * maxCanvasWidth) / canvasImage.width;
         
-        const maxHeight = 70;
+        const maxHeight = 85;
         let finalImgHeight = imgHeight;
-        let finalImgWidth = imgWidth;
+        let finalImgWidth = maxCanvasWidth;
         if (imgHeight > maxHeight) {
           finalImgHeight = maxHeight;
           finalImgWidth = (canvasImage.width * maxHeight) / canvasImage.height;
         }
 
         doc.addImage(imgData, "PNG", margin, y, finalImgWidth, finalImgHeight);
-        y += finalImgHeight + 10;
+        y += finalImgHeight + 6;
+
+        // Add FK Relations Mapping Text
+        if (links.length > 0) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
+          doc.setTextColor(46, 42, 92);
+          doc.text("Foreign Key Relations Mapping:", margin, y);
+          y += 5;
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
+          doc.setTextColor(90, 90, 90);
+          links.forEach((l) => {
+            doc.text(`• ${l.fromTable}.${l.fromField}  ──references──>  ${l.toTable}.${l.toField}`, margin + 3, y);
+            y += 4;
+          });
+          y += 4;
+        }
       }
 
+      // Essay Questions Section
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
+      doc.setFontSize(11);
       doc.setTextColor(46, 42, 92);
       doc.text("Design Explanations & Reflections:", margin, y);
       y += 6;
 
-      doc.setFontSize(10);
+      doc.setFontSize(9.5);
       const addAnswerSection = (title, answer) => {
         if (y > pageHeight - 35) {
           doc.addPage();
@@ -303,13 +369,13 @@ ${[...lines, ...fks].join(",\n")}
         doc.setTextColor(80, 80, 80);
         const splitText = doc.splitTextToSize(answer || "-", pageWidth - (margin * 2));
         doc.text(splitText, margin, y);
-        y += (splitText.length * 5) + 6;
+        y += (splitText.length * 4.5) + 6;
       };
 
-      addAnswerSection("1. Benefits of 3 Related Tables vs 1 Single Table:", explanations.threeTablesBenefit);
-      addAnswerSection("2. Primary Keys Role in Accuracy & Organisation:", explanations.primaryKeyRole);
-      addAnswerSection("3. Foreign Keys Role in Table Integration:", explanations.foreignKeyRole);
-      addAnswerSection("4. Impact & Consequences of Removing Foreign Keys:", explanations.removedFkConsequences);
+      addAnswerSection("1. Why is organising data into three related tables better than one table?", explanations.threeTablesBenefit);
+      addAnswerSection("2. How Primary Keys help keep database organised and accurate:", explanations.primaryKeyRole);
+      addAnswerSection("3. How Foreign Keys help different tables work together:", explanations.foreignKeyRole);
+      addAnswerSection("4. Problems that might occur if Foreign Keys were removed:", explanations.removedFkConsequences);
 
       doc.save(`Database_Design_${studentInfo.name.replace(/\s+/g, "_")}.pdf`);
       alert("🎉 Success! Your PDF report with the database diagram has been downloaded.");
@@ -482,7 +548,7 @@ ${[...lines, ...fks].join(",\n")}
               touchAction: "pan-x pan-y",
             }}
           >
-            <div style={{ position: "relative", width: canvasW, height: canvasH }}>
+            <div ref={canvasInnerRef} style={{ position: "relative", width: canvasW, height: canvasH, backgroundColor: "#332E68" }}>
               <svg width={canvasW} height={canvasH} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
                 {links.map((l) => {
                   const rightward = l.from.x < l.to.x;
@@ -677,18 +743,40 @@ ${[...lines, ...fks].join(",\n")}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #524C99", paddingTop: 20, marginTop: 10 }}>
               <button
                 onClick={() => setStep(2)}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "10px 20px", fontWeight: 700, fontSize: 13 }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
               >
                 <ArrowLeft size={16} /> Back to Design
               </button>
               <button
                 onClick={handleExportPDF}
                 disabled={isExporting}
-                style={{ display: "flex", alignItems: "center", gap: 8, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "12px 24px", fontWeight: 800, fontSize: 14, boxShadow: "0 4px 15px rgba(95, 212, 193, 0.3)" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 800, fontSize: 13 }}
               >
-                {isExporting ? "Processing..." : "Download PDF & Submit 🚀"}
+                {isExporting ? "Generating PDF..." : "Download PDF & Submit 🚀"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SQL Modal */}
+      {sqlOpen && (
+        <div onClick={() => setSqlOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,12,40,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "min(620px, 90vw)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#292460", border: "1.5px solid #524C99", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1.5px solid #524C99" }}>
+              <span style={{ fontWeight: 800, fontSize: 15 }}>Your design as SQL</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={copySql} style={{ display: "flex", alignItems: "center", gap: 5, background: copied ? "#5FD4C1" : "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 800 }}>
+                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+                </button>
+                <button onClick={() => setSqlOpen(false)} style={{ background: "transparent", border: "none", color: "#A9A3E0" }}>
+                  <X size={19} />
+                </button>
+              </div>
+            </div>
+            <pre style={{ margin: 0, padding: 18, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", fontSize: 13, lineHeight: 1.7, color: "#E4E1F5", whiteSpace: "pre-wrap" }}>
+              {buildSql() || "-- Add a table to see its SQL here."}
+            </pre>
           </div>
         </div>
       )}
