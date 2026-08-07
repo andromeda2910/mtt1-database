@@ -491,7 +491,7 @@ export default function MultiStepDbDesigner() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#A9A3E0", marginBottom: 4, textTransform: "uppercase" }}>Class / House *</label>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#A9A3E0", marginBottom: 4, textTransform: "uppercase" }}>Class*</label>
                 <select
                   style={{ width: "100%" }}
                   value={studentInfo.class}
