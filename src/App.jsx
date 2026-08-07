@@ -42,7 +42,6 @@ export default function MultiStepDbDesigner() {
     scenario: "School Computer Lab"
   });
 
-  // Empty initial tables list so students build their own tables
   const [tables, setTables] = useState([]);
 
   const [selected, setSelected] = useState(null);
@@ -55,10 +54,10 @@ export default function MultiStepDbDesigner() {
   const counter = useRef(1);
 
   const [explanations, setExplanations] = useState({
-    separationReason: "",
+    threeTablesBenefit: "",
     primaryKeyRole: "",
     foreignKeyRole: "",
-    dataRedundancy: ""
+    removedFkConsequences: ""
   });
 
   const updateTable = useCallback((id, fn) => {
@@ -88,7 +87,6 @@ export default function MultiStepDbDesigner() {
   const editField = (id, fid, patch) =>
     updateTable(id, (t) => ({ ...t, fields: t.fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) }));
 
-  // Handle Foreign Key Selection: Automatically links PK field and updates current field name & type
   const handleFkTableSelect = (tableId, fieldId, refTableId) => {
     if (!refTableId) {
       editField(tableId, fieldId, { refTable: null, refField: null });
@@ -98,22 +96,20 @@ export default function MultiStepDbDesigner() {
     const targetTable = tables.find((t) => t.id === refTableId);
     if (!targetTable) return;
 
-    // Find Primary Key field of target table, or fallback to first field
     const targetPkField = targetTable.fields.find((f) => f.pk) || targetTable.fields[0];
 
     if (targetPkField) {
       editField(tableId, fieldId, {
         refTable: refTableId,
         refField: targetPkField.id,
-        name: targetPkField.name, // Auto fill field name to match primary key
-        type: targetPkField.type  // Auto fill matching data type
+        name: targetPkField.name,
+        type: targetPkField.type
       });
     } else {
       editField(tableId, fieldId, { refTable: refTableId, refField: null });
     }
   };
 
-  // Universal Drag Handler using Pointer Events
   const startDrag = (e, id) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -227,7 +223,7 @@ ${[...lines, ...fks].join(",\n")}
   };
 
   const handleExportPDF = async () => {
-    if (!explanations.separationReason || !explanations.primaryKeyRole) {
+    if (!explanations.threeTablesBenefit || !explanations.primaryKeyRole) {
       alert("⚠️ Please fill out at least the key reflection questions before submitting!");
       return;
     }
@@ -310,10 +306,10 @@ ${[...lines, ...fks].join(",\n")}
         y += (splitText.length * 5) + 6;
       };
 
-      addAnswerSection("1. Table Separation Reason:", explanations.separationReason);
-      addAnswerSection("2. Primary Key (PK) Role:", explanations.primaryKeyRole);
-      addAnswerSection("3. Foreign Key (FK) Role:", explanations.foreignKeyRole);
-      addAnswerSection("4. Data Redundancy Prevention:", explanations.dataRedundancy);
+      addAnswerSection("1. Benefits of 3 Related Tables vs 1 Single Table:", explanations.threeTablesBenefit);
+      addAnswerSection("2. Primary Keys Role in Accuracy & Organisation:", explanations.primaryKeyRole);
+      addAnswerSection("3. Foreign Keys Role in Table Integration:", explanations.foreignKeyRole);
+      addAnswerSection("4. Impact & Consequences of Removing Foreign Keys:", explanations.removedFkConsequences);
 
       doc.save(`Database_Design_${studentInfo.name.replace(/\s+/g, "_")}.pdf`);
       alert("🎉 Success! Your PDF report with the database diagram has been downloaded.");
@@ -627,25 +623,25 @@ ${[...lines, ...fks].join(",\n")}
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  1. Why must data in this scenario be separated into multiple distinct tables rather than combined into one giant table?
+                  1. Why is organising the data into three related tables a better solution than storing everything in one table?
                 </label>
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
                   placeholder="Write your explanation here..."
-                  value={explanations.separationReason}
-                  onChange={(e) => setExplanations({ ...explanations, separationReason: e.target.value })}
+                  value={explanations.threeTablesBenefit}
+                  onChange={(e) => setExplanations({ ...explanations, threeTablesBenefit: e.target.value })}
                 />
               </div>
 
               <div>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  2. What is the role of the <b style={{ color: "#FFC857" }}>Primary Key (PK)</b> that you assigned in your main table?
+                  2. How do the <b style={{ color: "#FFC857" }}>Primary Keys</b> you selected help keep your database organised and accurate?
                 </label>
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
-                  placeholder="Explain the role of the PK..."
+                  placeholder="Explain the role of Primary Keys..."
                   value={explanations.primaryKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, primaryKeyRole: e.target.value })}
                 />
@@ -653,12 +649,12 @@ ${[...lines, ...fks].join(",\n")}
 
               <div>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  3. How does a <b style={{ color: "#5FD4C1" }}>Foreign Key (FK)</b> help bridge a transaction table to a reference table?
+                  3. How do the <b style={{ color: "#5FD4C1" }}>Foreign Keys</b> in your design help different tables work together?
                 </label>
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
-                  placeholder="Explain the role of the FK as a bridge..."
+                  placeholder="Explain how Foreign Keys connect tables..."
                   value={explanations.foreignKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, foreignKeyRole: e.target.value })}
                 />
@@ -666,14 +662,14 @@ ${[...lines, ...fks].join(",\n")}
 
               <div>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  4. How does your design prevent the repetition of duplicate data (<i>Data Redundancy</i>)?
+                  4. If one of your Foreign Keys were removed, what problems might occur in your database? Explain your reasoning.
                 </label>
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
-                  placeholder="Explain how redundancy is prevented..."
-                  value={explanations.dataRedundancy}
-                  onChange={(e) => setExplanations({ ...explanations, dataRedundancy: e.target.value })}
+                  placeholder="Explain potential issues if a Foreign Key is removed..."
+                  value={explanations.removedFkConsequences}
+                  onChange={(e) => setExplanations({ ...explanations, removedFkConsequences: e.target.value })}
                 />
               </div>
             </div>
@@ -681,43 +677,4 @@ ${[...lines, ...fks].join(",\n")}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #524C99", paddingTop: 20, marginTop: 10 }}>
               <button
                 onClick={() => setStep(2)}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
-              >
-                <ArrowLeft size={16} /> Back to Design
-              </button>
-              <button
-                onClick={handleExportPDF}
-                disabled={isExporting}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 800, fontSize: 13 }}
-              >
-                {isExporting ? "Generating PDF..." : "Download PDF & Submit 🚀"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SQL Modal */}
-      {sqlOpen && (
-        <div onClick={() => setSqlOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,12,40,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "min(620px, 90vw)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#292460", border: "1.5px solid #524C99", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1.5px solid #524C99" }}>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>Your design as SQL</span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={copySql} style={{ display: "flex", alignItems: "center", gap: 5, background: copied ? "#5FD4C1" : "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 800 }}>
-                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
-                </button>
-                <button onClick={() => setSqlOpen(false)} style={{ background: "transparent", border: "none", color: "#A9A3E0" }}>
-                  <X size={19} />
-                </button>
-              </div>
-            </div>
-            <pre style={{ margin: 0, padding: 18, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", fontSize: 13, lineHeight: 1.7, color: "#E4E1F5", whiteSpace: "pre-wrap" }}>
-              {buildSql() || "-- Add a table to see its SQL here."}
-            </pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4
