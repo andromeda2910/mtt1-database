@@ -677,4 +677,21 @@ ${[...lines, ...fks].join(",\n")}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #524C99", paddingTop: 20, marginTop: 10 }}>
               <button
                 onClick={() => setStep(2)}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "10px 20px", fontWeight: 700, fontSize: 13 }}
+              >
+                <ArrowLeft size={16} /> Back to Design
+              </button>
+              <button
+                onClick={handleExportPDF}
+                disabled={isExporting}
+                style={{ display: "flex", alignItems: "center", gap: 8, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "12px 24px", fontWeight: 800, fontSize: 14, boxShadow: "0 4px 15px rgba(95, 212, 193, 0.3)" }}
+              >
+                {isExporting ? "Processing..." : "Download PDF & Submit 🚀"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
