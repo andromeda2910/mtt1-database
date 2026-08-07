@@ -19,7 +19,7 @@ function newField(name = "field_name") {
 function newTable(x, y, index) {
   return {
     id: uid(),
-    name: `Table_${index}`,
+    name: `Table${index}`,
     x,
     y,
     fields: [{ ...newField("ID"), pk: true }],
@@ -39,43 +39,10 @@ export default function MultiStepDbDesigner() {
   const [studentInfo, setStudentInfo] = useState({
     name: "",
     class: "Clive Staples Lewis",
-    scenario: "School Library System"
+    scenario: "School Computer Lab"
   });
 
-  const [tables, setTables] = useState([
-    {
-      id: "t_students",
-      name: "Students",
-      x: 60,
-      y: 60,
-      fields: [
-        { id: "f1", name: "ID", type: "Character", pk: true, fk: false, refTable: null, refField: null },
-        { id: "f2", name: "Name", type: "Text", pk: false, fk: false, refTable: null, refField: null },
-        { id: "f3", name: "Class", type: "Text", pk: false, fk: false, refTable: null, refField: null },
-      ]
-    },
-    {
-      id: "t_borrowing",
-      name: "Borrowing",
-      x: 350,
-      y: 60,
-      fields: [
-        { id: "f4", name: "ID_Borrowing", type: "Character", pk: true, fk: false, refTable: null, refField: null },
-        { id: "f5", name: "Books_ID", type: "Character", pk: false, fk: true, refTable: "t_books", refField: "f7" },
-        { id: "f6", name: "Students_ID", type: "Character", pk: false, fk: true, refTable: "t_students", refField: "f1" },
-      ]
-    },
-    {
-      id: "t_books",
-      name: "Books",
-      x: 670,
-      y: 60,
-      fields: [
-        { id: "f7", name: "Books_ID", type: "Character", pk: true, fk: false, refTable: null, refField: null },
-        { id: "f8", name: "Book_Name", type: "Text", pk: false, fk: false, refTable: null, refField: null },
-      ]
-    }
-  ]);
+  const [tables, setTables] = useState([]);
 
   const [selected, setSelected] = useState(null);
   const [sqlOpen, setSqlOpen] = useState(false);
@@ -85,13 +52,13 @@ export default function MultiStepDbDesigner() {
   const canvasRef = useRef(null);
   const canvasInnerRef = useRef(null);
   const dragRef = useRef(null);
-  const counter = useRef(4);
+  const counter = useRef(1);
 
   const [explanations, setExplanations] = useState({
-    threeTablesBenefit: "",
+    separationReason: "",
     primaryKeyRole: "",
     foreignKeyRole: "",
-    removedFkConsequences: ""
+    fkRemovedProblems: ""
   });
 
   const updateTable = useCallback((id, fn) => {
@@ -100,7 +67,7 @@ export default function MultiStepDbDesigner() {
 
   const addTable = () => {
     const n = counter.current++;
-    const t = newTable(60 + ((n * 30) % 200), 60 + ((n * 30) % 150), n);
+    const t = newTable(50 + ((n * 40) % 250), 50 + ((n * 40) % 150), n);
     setTables((prev) => [...prev, t]);
     setSelected(t.id);
   };
@@ -116,79 +83,117 @@ export default function MultiStepDbDesigner() {
     );
   };
 
-  const addField = (id) => updateTable(id, (t) => ({ ...t, fields: [...t.fields, newField(`field_${t.fields.length + 1}`)] }));
+  const addField = (id) => updateTable(id, (t) => ({ ...t, fields: [...t.fields, newField(`field${t.fields.length + 1}`)] }));
   const removeField = (id, fid) => updateTable(id, (t) => ({ ...t, fields: t.fields.filter((f) => f.id !== fid) }));
+  
   const editField = (id, fid, patch) =>
-    updateTable(id, (t) => ({ ...t, fields: t.fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) }));
+    updateTable(id, (t) => ({
+      ...t,
+      fields: t.fields.map((f) => {
+        if (f.id !== fid) return f;
+        const updated = { ...f, ...patch };
+        
+        if (patch.fk === true && !f.fk) {
+          const otherTables = tables.filter((tt) => tt.id !== id);
+          if (otherTables.length > 0) {
+            const targetT = otherTables[0];
+            updated.refTable = targetT.id;
+            const pkField = targetT.fields.find((tf) => tf.pk) || targetT.fields[0];
+            if (pkField) {
+              updated.refField = pkField.id;
+              updated.type = pkField.type;
+            }
+            updated.name = `${targetT.name}_ID`;
+          }
+        }
 
-  const handleFkTableSelect = (tableId, fieldId, refTableId) => {
-    if (!refTableId) {
-      editField(tableId, fieldId, { refTable: null, refField: null });
-      return;
-    }
+        if (patch.refTable !== undefined) {
+          if (!patch.refTable) {
+            updated.refField = null;
+          } else {
+            const targetT = tables.find((tt) => tt.id === patch.refTable);
+            if (targetT) {
+              const pkField = targetT.fields.find((tf) => tf.pk) || targetT.fields[0];
+              if (pkField) {
+                updated.refField = pkField.id;
+                updated.type = pkField.type;
+              } else {
+                updated.refField = null;
+              }
+              updated.name = `${targetT.name}_ID`;
+            } else {
+              updated.refField = null;
+            }
+          }
+        }
 
-    const targetTable = tables.find((t) => t.id === refTableId);
-    if (!targetTable) return;
+        if (patch.refField !== undefined && patch.refField) {
+          const targetT = tables.find((tt) => tt.id === (patch.refTable || f.refTable));
+          if (targetT) {
+            const targetF = targetT.fields.find((tf) => tf.id === patch.refField);
+            if (targetF) {
+              updated.type = targetF.type;
+            }
+          }
+        }
 
-    const targetPkField = targetTable.fields.find((f) => f.pk) || targetTable.fields[0];
+        return updated;
+      }),
+    }));
 
-    if (targetPkField) {
-      editField(tableId, fieldId, {
-        refTable: refTableId,
-        refField: targetPkField.id,
-        name: targetPkField.name,
-        type: targetPkField.type
-      });
-    } else {
-      editField(tableId, fieldId, { refTable: refTableId, refField: null });
-    }
-  };
-
-  const startDrag = (e, id) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    if (e.target.setPointerCapture) {
-      e.target.setPointerCapture(e.pointerId);
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const t = tables.find((tt) => tt.id === id);
-    dragRef.current = { 
-      id, 
-      pointerId: e.pointerId,
-      offX: e.clientX - rect.left + canvas.scrollLeft - t.x, 
-      offY: e.clientY - rect.top + canvas.scrollTop - t.y 
-    };
-    setSelected(id);
-    
-    window.addEventListener("pointermove", onDrag);
-    window.addEventListener("pointerup", endDrag);
-    window.addEventListener("pointercancel", endDrag);
-  };
-
-  const onDrag = useCallback((e) => {
+  // ================= UNIFIED DRAG HANDLERS (MOUSE + TOUCH) =================
+  const handleDragMove = useCallback((clientX, clientY) => {
     const d = dragRef.current;
     const canvas = canvasRef.current;
     if (!d || !canvas) return;
-
     const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left + canvas.scrollLeft - d.offX);
-    const y = Math.max(0, e.clientY - rect.top + canvas.scrollTop - d.offY);
+    const x = Math.max(0, clientX - rect.left + canvas.scrollLeft - d.offX);
+    const y = Math.max(0, clientY - rect.top + canvas.scrollTop - d.offY);
     setTables((prev) => prev.map((t) => (t.id === d.id ? { ...t, x, y } : t)));
   }, []);
 
-  const endDrag = useCallback((e) => {
-    if (dragRef.current && e?.target?.releasePointerCapture && dragRef.current.pointerId !== undefined) {
-      try {
-        e.target.releasePointerCapture(dragRef.current.pointerId);
-      } catch {}
-    }
+  const handleDragEnd = useCallback(() => {
     dragRef.current = null;
-    window.removeEventListener("pointermove", onDrag);
-    window.removeEventListener("pointerup", endDrag);
-    window.removeEventListener("pointercancel", endDrag);
-  }, [onDrag]);
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("touchend", onTouchEnd);
+  }, []);
+
+  const onMouseMove = (e) => handleDragMove(e.clientX, e.clientY);
+  const onMouseUp = () => handleDragEnd();
+  const onTouchMove = (e) => {
+    if (e.touches && e.touches[0]) {
+      handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+  const onTouchEnd = () => handleDragEnd();
+
+  const startMouseDrag = (e, id) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const t = tables.find((tt) => tt.id === id);
+    if (!t) return;
+    dragRef.current = { id, offX: e.clientX - rect.left + canvas.scrollLeft - t.x, offY: e.clientY - rect.top + canvas.scrollTop - t.y };
+    setSelected(id);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  const startTouchDrag = (e, id) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !e.touches || !e.touches[0]) return;
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const t = tables.find((tt) => tt.id === id);
+    if (!t) return;
+    dragRef.current = { id, offX: touch.clientX - rect.left + canvas.scrollLeft - t.x, offY: touch.clientY - rect.top + canvas.scrollTop - t.y };
+    setSelected(id);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
+  };
+  // =========================================================================
 
   const links = useMemo(() => {
     const out = [];
@@ -201,10 +206,6 @@ export default function MultiStepDbDesigner() {
           if (ti === -1) return;
           out.push({
             id: `${f.id}-${f.refField}`,
-            fromTable: t.name,
-            fromField: f.name,
-            toTable: target.name,
-            toField: target.fields[ti]?.name,
             from: fieldPos(t, i),
             to: fieldPos(target, ti),
             active: selected === t.id || selected === target.id,
@@ -215,8 +216,8 @@ export default function MultiStepDbDesigner() {
     return out;
   }, [tables, selected]);
 
-  const canvasW = Math.max(1050, ...tables.map((t) => t.x + TABLE_W + 100));
-  const canvasH = Math.max(550, ...tables.map((t) => t.y + tableHeight(t) + 100));
+  const canvasW = Math.max(1200, ...tables.map((t) => t.x + TABLE_W + 160));
+  const canvasH = Math.max(700, ...tables.map((t) => t.y + tableHeight(t) + 160));
 
   const buildSql = () =>
     tables
@@ -230,9 +231,7 @@ export default function MultiStepDbDesigner() {
             return target && tf ? `  FOREIGN KEY (${f.name}) REFERENCES ${target.name}(${tf.name})` : null;
           })
           .filter(Boolean);
-        return `CREATE TABLE ${t.name} (
-${[...lines, ...fks].join(",\n")}
-);`;
+        return `CREATE TABLE ${t.name} (\n${[...lines, ...fks].join(",\n")}\n);`;
       })
       .join("\n\n");
 
@@ -246,7 +245,7 @@ ${[...lines, ...fks].join(",\n")}
 
   const handleNextFromStep1 = () => {
     if (!studentInfo.name.trim()) {
-      alert("⚠️ Please enter your Full Name first!");
+      alert("⚠️ Please enter your Full Name before proceeding!");
       return;
     }
     setStep(2);
@@ -260,13 +259,16 @@ ${[...lines, ...fks].join(",\n")}
     setStep(3);
   };
 
+  // ================= PDF EXPORT =================
   const handleExportPDF = async () => {
-    if (!explanations.threeTablesBenefit || !explanations.primaryKeyRole) {
-      alert("⚠️ Please fill out at least the key reflection questions before submitting!");
+    if (!explanations.separationReason || !explanations.primaryKeyRole) {
+      alert("⚠️ Please complete the reflection questions in step 3 before submitting!");
       return;
     }
 
     setIsExporting(true);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
     try {
       const doc = new jsPDF("p", "mm", "a4");
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -274,52 +276,47 @@ ${[...lines, ...fks].join(",\n")}
       const margin = 15;
       let y = margin;
 
-      // Header Title
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
+      doc.setFontSize(15);
       doc.setTextColor(46, 42, 92);
       doc.text("Mid Term Test: Database Design Report", margin, y);
-      y += 8;
+      y += 7;
 
-      // Student Info Header
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(80, 80, 80);
-      doc.text(`Full Name: ${studentInfo.name}  |  Class: ${studentInfo.class}  |  Scenario: ${studentInfo.scenario}`, margin, y);
-      y += 6;
+      doc.text(`Full Name: ${studentInfo.name}  |  Class: ${studentInfo.class}`, margin, y);
+      y += 5;
+      doc.text(`Scenario: ${studentInfo.scenario}`, margin, y);
+      y += 7;
 
       doc.setDrawColor(200, 200, 200);
       doc.line(margin, y, pageWidth - margin, y);
-      y += 8;
+      y += 7;
 
-      // Render Database Schema Canvas as Image
       const targetElement = canvasInnerRef.current || canvasRef.current;
+      
       if (targetElement) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
         doc.setTextColor(46, 42, 92);
         doc.text("Database Schema Diagram & Relations:", margin, y);
-        y += 6;
+        y += 5;
 
         const canvasImage = await html2canvas(targetElement, {
-          scale: 2,
+          scale: 2, 
           useCORS: true,
           backgroundColor: "#332E68",
-          scrollX: 0,
-          scrollY: 0,
-          width: canvasW,
-          height: canvasH,
-          windowWidth: canvasW,
-          windowHeight: canvasH
+          logging: false
         });
         const imgData = canvasImage.toDataURL("image/png");
         
-        const maxCanvasWidth = pageWidth - (margin * 2);
-        const imgHeight = (canvasImage.height * maxCanvasWidth) / canvasImage.width;
+        const imgWidth = pageWidth - (margin * 2);
+        const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
         
-        const maxHeight = 80;
+        const maxHeight = 75; 
         let finalImgHeight = imgHeight;
-        let finalImgWidth = maxCanvasWidth;
+        let finalImgWidth = imgWidth;
         if (imgHeight > maxHeight) {
           finalImgHeight = maxHeight;
           finalImgWidth = (canvasImage.width * maxHeight) / canvasImage.height;
@@ -327,58 +324,78 @@ ${[...lines, ...fks].join(",\n")}
 
         doc.addImage(imgData, "PNG", margin, y, finalImgWidth, finalImgHeight);
         y += finalImgHeight + 6;
-
-        // Foreign Key Relations Mapping List
-        if (links.length > 0) {
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(9.5);
-          doc.setTextColor(46, 42, 92);
-          doc.text("Foreign Key Relations Mapping:", margin, y);
-          y += 5;
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8.5);
-          doc.setTextColor(90, 90, 90);
-          links.forEach((l) => {
-            doc.text(`• ${l.fromTable}.${l.fromField}  ──references──>  ${l.toTable}.${l.toField}`, margin + 3, y);
-            y += 4;
-          });
-          y += 4;
-        }
       }
 
-      // Essay Questions Section
+      const fkMappings = [];
+      tables.forEach((t) => {
+        t.fields.forEach((f) => {
+          if (f.fk && f.refTable && f.refField) {
+            const refT = tables.find((tt) => tt.id === f.refTable);
+            const refF = refT?.fields.find((ff) => ff.id === f.refField);
+            if (refT && refF) {
+              fkMappings.push(`${t.name}.${f.name}   REFERENCES   ${refT.name}.${refF.name}`);
+            }
+          }
+        });
+      });
+
+      if (fkMappings.length > 0) {
+        if (y > pageHeight - 30) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(46, 42, 92);
+        doc.text("Foreign Key Relations Mapping:", margin, y);
+        y += 5;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        fkMappings.forEach((mapping) => {
+          doc.text(`•  ${mapping}`, margin + 3, y);
+          y += 4.5;
+        });
+        y += 3;
+      }
+
+      if (y > pageHeight - 35) {
+        doc.addPage();
+        y = margin;
+      }
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.setTextColor(46, 42, 92);
       doc.text("Design Explanations & Reflections:", margin, y);
-      y += 6;
+      y += 5;
 
-      doc.setFontSize(9.5);
+      doc.setFontSize(9);
       const addAnswerSection = (title, answer) => {
-        if (y > pageHeight - 35) {
+        if (y > pageHeight - 22) {
           doc.addPage();
           y = margin;
         }
         doc.setFont("helvetica", "bold");
         doc.setTextColor(40, 40, 40);
         doc.text(title, margin, y);
-        y += 5;
+        y += 4.5;
 
         doc.setFont("helvetica", "normal");
         doc.setTextColor(80, 80, 80);
         const splitText = doc.splitTextToSize(answer || "-", pageWidth - (margin * 2));
         doc.text(splitText, margin, y);
-        y += (splitText.length * 4.5) + 6;
+        y += (splitText.length * 4.5) + 4;
       };
 
-      addAnswerSection("1. Why is organising data into three related tables better than one table?", explanations.threeTablesBenefit);
+      addAnswerSection("1. Why is organising data into three related tables better than one table?", explanations.separationReason);
       addAnswerSection("2. How Primary Keys help keep database organised and accurate:", explanations.primaryKeyRole);
       addAnswerSection("3. How Foreign Keys help different tables work together:", explanations.foreignKeyRole);
-      addAnswerSection("4. Problems that might occur if Foreign Keys were removed:", explanations.removedFkConsequences);
+      addAnswerSection("4. If one of your Foreign Keys were removed, what problems might occur in your database?", explanations.fkRemovedProblems);
 
-      doc.save(`Database_Design_${studentInfo.name.replace(/\s+/g, "_")}.pdf`);
-      alert("🎉 Success! Your PDF report with the database diagram has been downloaded.");
+      doc.save(`Database_Design_${studentInfo.name.replace(/\s+/g, "_") || "Report"}.pdf`);
+      alert("🎉 Success! Your Portrait PDF report has been downloaded.");
     } catch (err) {
       console.error(err);
       alert("⚠️ Failed to generate PDF. Please try again.");
@@ -394,10 +411,10 @@ ${[...lines, ...fks].join(",\n")}
         background: "#2E2A5C",
         color: "#F4F2FA",
         width: "100%",
-        height: "100vh",
+        minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        overflowX: "hidden",
       }}
     >
       <style>{`
@@ -418,10 +435,10 @@ ${[...lines, ...fks].join(",\n")}
         .badge {
           border: 1.5px solid #524C99;
           border-radius: 6px;
-          padding: 5px 9px;
-          font-size: 12px;
+          padding: 4px 8px;
+          font-size: 11px;
           font-weight: 800;
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 4px;
           background: transparent;
@@ -430,41 +447,40 @@ ${[...lines, ...fks].join(",\n")}
         }
         .badge.on-pk { background: #FFC857; border-color: #FFC857; color: #2E2A5C; }
         .badge.on-fk { background: #5FD4C1; border-color: #5FD4C1; color: #2E2A5C; }
-        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #2E2A5C; }
-        ::-webkit-scrollbar-thumb { background: #524C99; border-radius: 5px; }
-        .drag-handle { touch-action: none; user-select: none; }
+        ::-webkit-scrollbar-thumb { background: #524C99; border-radius: 4px; }
       `}</style>
 
-      {/* HEADER */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: "1px solid #453F85", flexShrink: 0, background: "#292460" }}>
+      {/* HEADER UTAMA */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #453F85", flexShrink: 0, background: "#292460", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Database size={22} color="#FFC857" />
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>Mid Term Test: Database Design Studio</div>
-            <div style={{ fontSize: 12, color: "#A9A3E0" }}>Step {step} of 3 &mdash; {step === 1 ? "Identity & Scenario" : step === 2 ? "Schema Canvas Designer" : "Design Explanation"}</div>
+            <div style={{ fontWeight: 800, fontSize: "clamp(14px, 1.8vw, 17px)" }}>Mid Term Test: Database Design Studio</div>
+            <div style={{ fontSize: 11, color: "#A9A3E0" }}>Step {step} of 3 &mdash; {step === 1 ? "Identity & Scenario" : step === 2 ? "Schema Canvas Designer" : "Design Explanation"}</div>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800, background: step === 1 ? "#FFC857" : "#3A3570", color: step === 1 ? "#2E2A5C" : "#A9A3E0" }}>1. Identity</span>
-          <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800, background: step === 2 ? "#FFC857" : "#3A3570", color: step === 2 ? "#2E2A5C" : "#A9A3E0" }}>2. Table Design</span>
-          <span style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, fontWeight: 800, background: step === 3 ? "#FFC857" : "#3A3570", color: step === 3 ? "#2E2A5C" : "#A9A3E0" }}>3. Explanation</span>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ padding: "3px 8px", borderRadius: 16, fontSize: 11, fontWeight: 800, background: step === 1 ? "#FFC857" : "#3A3570", color: step === 1 ? "#2E2A5C" : "#A9A3E0" }}>1. ID</span>
+          <span style={{ padding: "3px 8px", borderRadius: 16, fontSize: 11, fontWeight: 800, background: step === 2 ? "#FFC857" : "#3A3570", color: step === 2 ? "#2E2A5C" : "#A9A3E0" }}>2. Design</span>
+          <span style={{ padding: "3px 8px", borderRadius: 16, fontSize: 11, fontWeight: 800, background: step === 3 ? "#FFC857" : "#3A3570", color: step === 3 ? "#2E2A5C" : "#A9A3E0" }}>3. Essay</span>
         </div>
       </div>
 
-      {/* STEP 1: IDENTITY & SCENARIO */}
+      {/* ================= STEP 1 ================= */}
       {step === 1 && (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ width: "100%", maxWidth: 520, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: 30, boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 480, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: "24px 20px", boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 5 }}>Welcome to Practical Mid Term Exam</h2>
-              <p style={{ fontSize: 13, color: "#A9A3E0" }}>Please fill in your student identity and select a database scenario before proceeding.</p>
+              <h2 style={{ fontSize: "clamp(18px, 2.2vw, 22px)", fontWeight: 800, marginBottom: 4 }}>Welcome to Mid Term Exam</h2>
+              <p style={{ fontSize: 12, color: "#A9A3E0" }}>Please fill in your student identity and select your database scenario.</p>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: "#A9A3E0", marginBottom: 6, textTransform: "uppercase" }}>Full Name *</label>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#A9A3E0", marginBottom: 4, textTransform: "uppercase" }}>Full Name *</label>
                 <input
                   type="text"
                   placeholder="e.g., Alex Johnson"
@@ -475,7 +491,7 @@ ${[...lines, ...fks].join(",\n")}
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: "#A9A3E0", marginBottom: 6, textTransform: "uppercase" }}>Class *</label>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#A9A3E0", marginBottom: 4, textTransform: "uppercase" }}>Class / House *</label>
                 <select
                   style={{ width: "100%" }}
                   value={studentInfo.class}
@@ -489,13 +505,12 @@ ${[...lines, ...fks].join(",\n")}
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: "#A9A3E0", marginBottom: 6, textTransform: "uppercase" }}>Database Scenario</label>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 800, color: "#A9A3E0", marginBottom: 4, textTransform: "uppercase" }}>Database Scenario *</label>
                 <select
                   style={{ width: "100%" }}
                   value={studentInfo.scenario}
                   onChange={(e) => setStudentInfo({ ...studentInfo, scenario: e.target.value })}
                 >
-                  <option value="School Library System">School Library System</option>
                   <option value="School Computer Lab">School Computer Lab</option>
                   <option value="School Sports Equipment Room">School Sports Equipment Room</option>
                   <option value="School Cafetaria">School Cafetaria</option>
@@ -505,7 +520,7 @@ ${[...lines, ...fks].join(",\n")}
 
             <button
               onClick={handleNextFromStep1}
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 10, padding: "12px", fontWeight: 800, fontSize: 14, marginTop: 10 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 10, padding: "12px", fontWeight: 800, fontSize: 14, marginTop: 6 }}
             >
               Proceed to Table Design <ArrowRight size={18} />
             </button>
@@ -513,37 +528,37 @@ ${[...lines, ...fks].join(",\n")}
         </div>
       )}
 
-      {/* STEP 2: CANVAS DESIGNER (Tetap di DOM off-screen saat di Step 3) */}
-      <div
+      {/* ================= STEP 2 ================= */}
+      <div 
         style={
-          step === 2
-            ? { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }
-            : { position: "fixed", left: "-9999px", top: "-9999px", width: canvasW, height: canvasH, overflow: "hidden", pointerEvents: "none" }
+          step === 2 
+            ? { flex: 1, display: "flex", flexDirection: "column", height: "calc(100vh - 60px)", overflow: "hidden" }
+            : { position: "fixed", top: "-9999px", left: "-9999px", width: canvasW, height: canvasH, overflow: "hidden", pointerEvents: "none" }
         }
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 22px", background: "#332E68", borderBottom: "1px solid #453F85" }}>
-          <div style={{ fontSize: 13, color: "#A9A3E0" }}>
-            Scenario: <b style={{ color: "#FFC857" }}>{studentInfo.scenario}</b> &bull; Drag table headers to reposition cards.
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", padding: "8px 16px", background: "#332E68", borderBottom: "1px solid #453F85", gap: 8 }}>
+          <div style={{ fontSize: 12, color: "#A9A3E0" }}>
+            Scenario: <b style={{ color: "#FFC857" }}>{studentInfo.scenario}</b> &bull; Drag tables by header.
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={addTable}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "7px 12px", fontWeight: 800, fontSize: 12 }}
+              style={{ display: "flex", alignItems: "center", gap: 5, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "6px 10px", fontWeight: 800, fontSize: 11 }}
             >
-              <Plus size={15} /> Add Table
+              <Plus size={14} /> Add Table
             </button>
             <button
               onClick={() => setSqlOpen(true)}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "7px 12px", fontWeight: 600, fontSize: 12 }}
+              style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 6, padding: "6px 10px", fontWeight: 600, fontSize: 11 }}
             >
-              View as SQL
+              View SQL
             </button>
           </div>
         </div>
 
         <div
           ref={canvasRef}
-          onPointerDown={() => setSelected(null)}
+          onMouseDown={() => setSelected(null)}
           style={{
             flex: 1,
             overflow: "auto",
@@ -554,7 +569,24 @@ ${[...lines, ...fks].join(",\n")}
             touchAction: "pan-x pan-y",
           }}
         >
-          <div ref={canvasInnerRef} style={{ position: "relative", width: canvasW, height: canvasH, backgroundColor: "#332E68" }}>
+          <div 
+            ref={canvasInnerRef} 
+            style={{ 
+              position: "relative", 
+              width: canvasW, 
+              height: canvasH, 
+              backgroundColor: "#332E68",
+              fontFamily: isExporting ? "sans-serif" : "inherit"
+            }}
+          >
+            {tables.length === 0 && !isExporting && (
+              <div style={{ position: "absolute", top: "40%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", color: "#A9A3E0", width: "90%" }}>
+                <Database size={42} color="#524C99" style={{ margin: "0 auto 8px", display: "block" }} />
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>No tables created yet</div>
+                <div style={{ fontSize: 12 }}>Click <b style={{ color: "#FFC857" }}>"+ Add Table"</b> above to build tables.</div>
+              </div>
+            )}
+
             <svg width={canvasW} height={canvasH} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
               {links.map((l) => {
                 const rightward = l.from.x < l.to.x;
@@ -575,7 +607,7 @@ ${[...lines, ...fks].join(",\n")}
             {tables.map((t) => (
               <div
                 key={t.id}
-                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 style={{
                   position: "absolute",
                   left: t.x,
@@ -588,68 +620,87 @@ ${[...lines, ...fks].join(",\n")}
                 }}
               >
                 <div
-                  className="drag-handle"
-                  onPointerDown={(e) => startDrag(e, t.id)}
-                  style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0" }}
+                  onMouseDown={(e) => startMouseDrag(e, t.id)}
+                  onTouchStart={(e) => startTouchDrag(e, t.id)}
+                  style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0", touchAction: "none" }}
                 >
-                  <input
-                    value={t.name}
-                    onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    style={{ flex: 1, fontWeight: 800, fontSize: 14, background: "transparent", border: "none", padding: "3px 4px" }}
-                  />
-                  <button onPointerDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
-                    <Trash2 size={15} />
-                  </button>
+                  {isExporting ? (
+                    <div style={{ flex: 1, fontWeight: "bold", fontSize: 14, color: "#F4F2FA", padding: "3px 4px" }}>
+                      {t.name}
+                    </div>
+                  ) : (
+                    <input
+                      value={t.name}
+                      onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      style={{ flex: 1, fontWeight: 800, fontSize: 13, background: "transparent", border: "none", padding: "3px 4px" }}
+                    />
+                  )}
+                  
+                  {!isExporting && (
+                    <button onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
 
                 <div>
                   {t.fields.map((f) => (
                     <div key={f.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderBottom: "1px solid #453F85" }}>
-                      <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                        <input value={f.name} onChange={(e) => editField(t.id, f.id, { name: e.target.value.replace(/\s+/g, "_") })} style={{ width: 84, fontSize: 12, padding: "5px 6px" }} />
-                        <select value={f.type} onChange={(e) => editField(t.id, f.id, { type: e.target.value })} style={{ flex: 1, fontSize: 11, padding: "5px 3px" }}>
-                          {DATA_TYPES.map((dt) => (
-                            <option key={dt} value={dt}>{dt}</option>
-                          ))}
-                        </select>
-                        <button onClick={() => removeField(t.id, f.id)} style={{ background: "transparent", border: "none", color: "#8A84C4", padding: 0 }} title="Delete field">
-                          <X size={14} />
-                        </button>
-                      </div>
+                      {isExporting ? (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "4px 2px", boxSizing: "border-box" }}>
+                          <span style={{ fontWeight: "bold", fontSize: 13, color: "#F4F2FA", lineHeight: "normal" }}>{f.name}</span>
+                          <span style={{ color: "#A9A3E0", fontSize: 12, fontWeight: "bold", lineHeight: "normal" }}>{f.type}</span>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                          <input value={f.name} onChange={(e) => editField(t.id, f.id, { name: e.target.value.replace(/\s+/g, "_") })} style={{ width: 80, fontSize: 11, padding: "5px 6px" }} />
+                          <select value={f.type} onChange={(e) => editField(t.id, f.id, { type: e.target.value })} style={{ flex: 1, fontSize: 11, padding: "5px 3px" }}>
+                            {DATA_TYPES.map((dt) => (
+                              <option key={dt} value={dt}>{dt}</option>
+                            ))}
+                          </select>
+                          <button onClick={() => removeField(t.id, f.id)} style={{ background: "transparent", border: "none", color: "#8A84C4", padding: 0 }} title="Delete field">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button className={`badge ${f.pk ? "on-pk" : ""}`} onClick={() => editField(t.id, f.id, { pk: !f.pk })} title="Primary Key">
-                          <Star size={11} /> PK
-                        </button>
-                        <button
-                          className={`badge ${f.fk ? "on-fk" : ""}`}
-                          onClick={() => editField(t.id, f.id, f.fk ? { fk: false, refTable: null, refField: null } : { fk: true })}
-                          title="Foreign Key"
-                        >
-                          <Link2 size={11} /> FK
-                        </button>
+                        {isExporting ? (
+                          <div style={{ display: "flex", gap: 6, paddingLeft: 2 }}>
+                            {f.pk && <span style={{ background: "#FFC857", color: "#2E2A5C", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>PK</span>}
+                            {f.fk && <span style={{ background: "#5FD4C1", color: "#2E2A5C", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>FK</span>}
+                          </div>
+                        ) : (
+                          <>
+                            <button className={`badge ${f.pk ? "on-pk" : ""}`} onClick={() => editField(t.id, f.id, { pk: !f.pk })} title="Primary Key">
+                              <Star size={11} /> PK
+                            </button>
+                            <button
+                              className={`badge ${f.fk ? "on-fk" : ""}`}
+                              onClick={() => editField(t.id, f.id, f.fk ? { fk: false, refTable: null, refField: null } : { fk: true })}
+                              title="Foreign Key"
+                            >
+                              <Link2 size={11} /> FK
+                            </button>
+                          </>
+                        )}
                       </div>
-                      {f.fk && (
+
+                      {!isExporting && f.fk && (
                         <div style={{ display: "flex", gap: 5 }}>
-                          <select 
-                            value={f.refTable || ""} 
-                            onChange={(e) => handleFkTableSelect(t.id, f.id, e.target.value || null)} 
-                            style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
-                          >
+                          <select value={f.refTable || ""} onChange={(e) => editField(t.id, f.id, { refTable: e.target.value || null })} style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}>
                             <option value="">target table?</option>
                             {tables.filter((tt) => tt.id !== t.id).map((tt) => (
                               <option key={tt.id} value={tt.id}>{tt.name}</option>
                             ))}
                           </select>
-                          <select 
-                            value={f.refField || ""} 
-                            onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} 
-                            disabled={!f.refTable} 
-                            style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
-                          >
+                          <select value={f.refField || ""} onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} disabled={!f.refTable} style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}>
                             <option value="">target field?</option>
                             {tables.find((tt) => tt.id === f.refTable)?.fields.map((tf) => (
-                              <option key={tf.id} value={tf.id}>{tf.name} {tf.pk ? "(PK)" : ""}</option>
+                              <option key={tf.id} value={tf.id}>{tf.name}</option>
                             ))}
                           </select>
                         </div>
@@ -658,104 +709,110 @@ ${[...lines, ...fks].join(",\n")}
                   ))}
                 </div>
 
-                <button onClick={() => addField(t.id)} style={{ width: "100%", height: FOOTER_H, background: "transparent", border: "none", color: "#A9A3E0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: "0 0 8px 8px" }}>
-                  <Plus size={14} /> Add field
-                </button>
+                {!isExporting && (
+                  <button onClick={() => addField(t.id)} style={{ width: "100%", height: FOOTER_H, background: "transparent", border: "none", color: "#A9A3E0", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: "0 0 8px 8px" }}>
+                    <Plus size={14} /> Add field
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", background: "#292460", borderTop: "1px solid #453F85" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: "#292460", borderTop: "1px solid #453F85" }}>
           <button
             onClick={() => setStep(1)}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
+            style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 12px", fontWeight: 600, fontSize: 12 }}
           >
             <ArrowLeft size={16} /> Back
           </button>
           <button
             onClick={handleNextFromStep2}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 800, fontSize: 13 }}
+            style={{ display: "flex", alignItems: "center", gap: 5, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 800, fontSize: 12 }}
           >
-            Proceed to Essay Questions <ArrowRight size={16} />
+            Proceed to Essay <ArrowRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* STEP 3: EXPLANATION QUESTIONS */}
+      {/* ================= STEP 3 ================= */}
       {step === 3 && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "30px 20px", display: "flex", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: 700, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: 30, boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 24 }}>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 5 }}>Step 3: Design Explanation & Reflection</h2>
-              <p style={{ fontSize: 13, color: "#A9A3E0" }}>Answer the following questions based on the database schema you created in Step 2.</p>
+        <div style={{ flex: 1, width: "100%", overflowY: "auto", padding: "24px 12px", display: "flex", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: "760px", background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 18, padding: "24px", boxSizing: "border-box", boxShadow: "0 12px 30px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column", gap: 24 }}>
+            <div style={{ borderBottom: "1.5px solid #524C99", paddingBottom: 14 }}>
+              <h2 style={{ fontSize: "clamp(17px, 2vw, 22px)", fontWeight: 800, marginBottom: 4, color: "#FFC857" }}>Step 3: Design Reflection</h2>
+              <p style={{ fontSize: "clamp(12px, 1.2vw, 13px)", color: "#C4BFF0", lineHeight: 1.4 }}>Answer the reflection questions thoroughly based on your database design.</p>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  1. Why is organising the data into three related tables a better solution than storing everything in one table?
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Question 1 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#292460", padding: 16, borderRadius: 12, border: "1px solid #524C99" }}>
+                <label style={{ fontSize: "clamp(12px, 1.3vw, 14px)", fontWeight: 700, color: "#F4F2FA", lineHeight: 1.4 }}>
+                  1. Why is organising data into three related tables better than one table?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%" }}
-                  placeholder="Write your explanation here..."
-                  value={explanations.threeTablesBenefit}
-                  onChange={(e) => setExplanations({ ...explanations, threeTablesBenefit: e.target.value })}
+                  style={{ width: "100%", resize: "vertical", padding: "10px", fontSize: 13, lineHeight: 1.4 }}
+                  placeholder="Explain why separating tables reduces redundancy..."
+                  value={explanations.separationReason}
+                  onChange={(e) => setExplanations({ ...explanations, separationReason: e.target.value })}
                 />
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  2. How do the <b style={{ color: "#FFC857" }}>Primary Keys</b> you selected help keep your database organised and accurate?
+              {/* Question 2 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#292460", padding: 16, borderRadius: 12, border: "1px solid #524C99" }}>
+                <label style={{ fontSize: "clamp(12px, 1.3vw, 14px)", fontWeight: 700, color: "#F4F2FA", lineHeight: 1.4 }}>
+                  2. How do the <b style={{ color: "#FFC857" }}>Primary Keys</b> keep your database organised and accurate?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%" }}
+                  style={{ width: "100%", resize: "vertical", padding: "10px", fontSize: 13, lineHeight: 1.4 }}
                   placeholder="Explain the role of Primary Keys..."
                   value={explanations.primaryKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, primaryKeyRole: e.target.value })}
                 />
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  3. How do the <b style={{ color: "#5FD4C1" }}>Foreign Keys</b> in your design help different tables work together?
+              {/* Question 3 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#292460", padding: 16, borderRadius: 12, border: "1px solid #524C99" }}>
+                <label style={{ fontSize: "clamp(12px, 1.3vw, 14px)", fontWeight: 700, color: "#F4F2FA", lineHeight: 1.4 }}>
+                  3. How do the <b style={{ color: "#5FD4C1" }}>Foreign Keys</b> help different tables work together?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%" }}
-                  placeholder="Explain how Foreign Keys connect tables..."
+                  style={{ width: "100%", resize: "vertical", padding: "10px", fontSize: 13, lineHeight: 1.4 }}
+                  placeholder="Explain how Foreign Keys establish relationships..."
                   value={explanations.foreignKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, foreignKeyRole: e.target.value })}
                 />
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                  4. If one of your Foreign Keys were removed, what problems might occur in your database? Explain your reasoning.
+              {/* Question 4 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#292460", padding: 16, borderRadius: 12, border: "1px solid #524C99" }}>
+                <label style={{ fontSize: "clamp(12px, 1.3vw, 14px)", fontWeight: 700, color: "#F4F2FA", lineHeight: 1.4 }}>
+                  4. If a Foreign Key were removed, what problems might occur?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%" }}
-                  placeholder="Explain potential issues if a Foreign Key is removed..."
-                  value={explanations.removedFkConsequences}
-                  onChange={(e) => setExplanations({ ...explanations, removedFkConsequences: e.target.value })}
+                  style={{ width: "100%", resize: "vertical", padding: "10px", fontSize: 13, lineHeight: 1.4 }}
+                  placeholder="Explain issues like orphaned records or loss of integrity..."
+                  value={explanations.fkRemovedProblems}
+                  onChange={(e) => setExplanations({ ...explanations, fkRemovedProblems: e.target.value })}
                 />
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #524C99", paddingTop: 20, marginTop: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", borderTop: "1.5px solid #524C99", paddingTop: 16, gap: 10 }}>
               <button
                 onClick={() => setStep(2)}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 10, padding: "10px 16px", fontWeight: 600, fontSize: 13 }}
               >
-                <ArrowLeft size={16} /> Back to Design
+                <ArrowLeft size={16} /> Back
               </button>
               <button
                 onClick={handleExportPDF}
                 disabled={isExporting}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 800, fontSize: 13 }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 10, padding: "11px 20px", fontWeight: 800, fontSize: 14 }}
               >
                 {isExporting ? "Generating PDF..." : "Download PDF & Submit 🚀"}
               </button>
@@ -766,21 +823,21 @@ ${[...lines, ...fks].join(",\n")}
 
       {/* SQL Modal */}
       {sqlOpen && (
-        <div onClick={() => setSqlOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,12,40,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "min(620px, 90vw)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#292460", border: "1.5px solid #524C99", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1.5px solid #524C99" }}>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>Your design as SQL</span>
+        <div onClick={() => setSqlOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,12,40,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "min(600px, 100%)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#292460", border: "1.5px solid #524C99", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1.5px solid #524C99" }}>
+              <span style={{ fontWeight: 800, fontSize: 14 }}>Your design as SQL</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={copySql} style={{ display: "flex", alignItems: "center", gap: 5, background: copied ? "#5FD4C1" : "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 800 }}>
-                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+                <button onClick={copySql} style={{ display: "flex", alignItems: "center", gap: 4, background: copied ? "#5FD4C1" : "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 800 }}>
+                  {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copied" : "Copy"}
                 </button>
                 <button onClick={() => setSqlOpen(false)} style={{ background: "transparent", border: "none", color: "#A9A3E0" }}>
-                  <X size={19} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
-            <pre style={{ margin: 0, padding: 18, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", fontSize: 13, lineHeight: 1.7, color: "#E4E1F5", whiteSpace: "pre-wrap" }}>
-              {buildSql() || "-- Add a table to see its SQL here."}
+            <pre style={{ margin: 0, padding: 16, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", fontSize: 12, lineHeight: 1.6, color: "#E4E1F5", whiteSpace: "pre-wrap" }}>
+              {buildSql() || "-- Add tables to view SQL code."}
             </pre>
           </div>
         </div>
