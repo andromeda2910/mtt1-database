@@ -19,7 +19,7 @@ function newField(name = "field_name") {
 function newTable(x, y, index) {
   return {
     id: uid(),
-    name: `Table${index}`,
+    name: `Table_${index}`,
     x,
     y,
     fields: [{ ...newField("ID"), pk: true }],
@@ -38,44 +38,12 @@ export default function MultiStepDbDesigner() {
   const [step, setStep] = useState(1);
   const [studentInfo, setStudentInfo] = useState({
     name: "",
-    class: "",
-    scenario: "School Library System"
+    class: "Clive Staples Lewis",
+    scenario: "School Computer Lab"
   });
 
-  const [tables, setTables] = useState(() => [
-    {
-      id: "t_students",
-      name: "Students",
-      x: 60,
-      y: 60,
-      fields: [
-        { id: "f1", name: "ID", type: "Character", pk: true, fk: false, refTable: null, refField: null },
-        { id: "f2", name: "Name", type: "Text", pk: false, fk: false, refTable: null, refField: null },
-        { id: "f3", name: "Class", type: "Text", pk: false, fk: false, refTable: null, refField: null },
-      ]
-    },
-    {
-      id: "t_borrowing",
-      name: "Borrowing",
-      x: 350,
-      y: 60,
-      fields: [
-        { id: "f4", name: "ID_Borrowing", type: "Character", pk: true, fk: false, refTable: null, refField: null },
-        { id: "f5", name: "Books_ID", type: "Character", pk: false, fk: true, refTable: "t_books", refField: "f7" },
-        { id: "f6", name: "Students_ID", type: "Character", pk: false, fk: true, refTable: "t_students", refField: "f1" },
-      ]
-    },
-    {
-      id: "t_books",
-      name: "Books",
-      x: 670,
-      y: 60,
-      fields: [
-        { id: "f7", name: "Books_ID", type: "Character", pk: true, fk: false, refTable: null, refField: null },
-        { id: "f8", name: "Book_Name", type: "Text", pk: false, fk: false, refTable: null, refField: null },
-      ]
-    }
-  ]);
+  // Empty initial tables list so students build their own tables
+  const [tables, setTables] = useState([]);
 
   const [selected, setSelected] = useState(null);
   const [sqlOpen, setSqlOpen] = useState(false);
@@ -84,7 +52,7 @@ export default function MultiStepDbDesigner() {
   
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
-  const counter = useRef(4);
+  const counter = useRef(1);
 
   const [explanations, setExplanations] = useState({
     separationReason: "",
@@ -99,7 +67,7 @@ export default function MultiStepDbDesigner() {
 
   const addTable = () => {
     const n = counter.current++;
-    const t = newTable(70 + ((n * 40) % 300), 70 + ((n * 40) % 200), n);
+    const t = newTable(60 + ((n * 30) % 200), 60 + ((n * 30) % 150), n);
     setTables((prev) => [...prev, t]);
     setSelected(t.id);
   };
@@ -115,36 +83,81 @@ export default function MultiStepDbDesigner() {
     );
   };
 
-  const addField = (id) => updateTable(id, (t) => ({ ...t, fields: [...t.fields, newField(`field${t.fields.length + 1}`)] }));
+  const addField = (id) => updateTable(id, (t) => ({ ...t, fields: [...t.fields, newField(`field_${t.fields.length + 1}`)] }));
   const removeField = (id, fid) => updateTable(id, (t) => ({ ...t, fields: t.fields.filter((f) => f.id !== fid) }));
   const editField = (id, fid, patch) =>
     updateTable(id, (t) => ({ ...t, fields: t.fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) }));
 
+  // Handle Foreign Key Selection: Automatically links PK field and updates current field name & type
+  const handleFkTableSelect = (tableId, fieldId, refTableId) => {
+    if (!refTableId) {
+      editField(tableId, fieldId, { refTable: null, refField: null });
+      return;
+    }
+
+    const targetTable = tables.find((t) => t.id === refTableId);
+    if (!targetTable) return;
+
+    // Find Primary Key field of target table, or fallback to first field
+    const targetPkField = targetTable.fields.find((f) => f.pk) || targetTable.fields[0];
+
+    if (targetPkField) {
+      editField(tableId, fieldId, {
+        refTable: refTableId,
+        refField: targetPkField.id,
+        name: targetPkField.name, // Auto fill field name to match primary key
+        type: targetPkField.type  // Auto fill matching data type
+      });
+    } else {
+      editField(tableId, fieldId, { refTable: refTableId, refField: null });
+    }
+  };
+
+  // Universal Drag Handler using Pointer Events
   const startDrag = (e, id) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (e.target.setPointerCapture) {
+      e.target.setPointerCapture(e.pointerId);
+    }
+
     const rect = canvas.getBoundingClientRect();
     const t = tables.find((tt) => tt.id === id);
-    dragRef.current = { id, offX: e.clientX - rect.left + canvas.scrollLeft - t.x, offY: e.clientY - rect.top + canvas.scrollTop - t.y };
+    dragRef.current = { 
+      id, 
+      pointerId: e.pointerId,
+      offX: e.clientX - rect.left + canvas.scrollLeft - t.x, 
+      offY: e.clientY - rect.top + canvas.scrollTop - t.y 
+    };
     setSelected(id);
-    window.addEventListener("mousemove", onDrag);
-    window.addEventListener("mouseup", endDrag);
+    
+    window.addEventListener("pointermove", onDrag);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
   };
 
   const onDrag = useCallback((e) => {
     const d = dragRef.current;
     const canvas = canvasRef.current;
     if (!d || !canvas) return;
+
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, e.clientX - rect.left + canvas.scrollLeft - d.offX);
     const y = Math.max(0, e.clientY - rect.top + canvas.scrollTop - d.offY);
     setTables((prev) => prev.map((t) => (t.id === d.id ? { ...t, x, y } : t)));
   }, []);
 
-  const endDrag = useCallback(() => {
+  const endDrag = useCallback((e) => {
+    if (dragRef.current && e?.target?.releasePointerCapture && dragRef.current.pointerId !== undefined) {
+      try {
+        e.target.releasePointerCapture(dragRef.current.pointerId);
+      } catch {}
+    }
     dragRef.current = null;
-    window.removeEventListener("mousemove", onDrag);
-    window.removeEventListener("mouseup", endDrag);
+    window.removeEventListener("pointermove", onDrag);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
   }, [onDrag]);
 
   const links = useMemo(() => {
@@ -183,7 +196,9 @@ export default function MultiStepDbDesigner() {
             return target && tf ? `  FOREIGN KEY (${f.name}) REFERENCES ${target.name}(${tf.name})` : null;
           })
           .filter(Boolean);
-        return `CREATE TABLE ${t.name} (\n${[...lines, ...fks].join(",\n")}\n);`;
+        return `CREATE TABLE ${t.name} (
+${[...lines, ...fks].join(",\n")}
+);`;
       })
       .join("\n\n");
 
@@ -196,8 +211,8 @@ export default function MultiStepDbDesigner() {
   };
 
   const handleNextFromStep1 = () => {
-    if (!studentInfo.name.trim() || !studentInfo.class.trim()) {
-      alert("⚠️ Please enter your Full Name and Class first!");
+    if (!studentInfo.name.trim()) {
+      alert("⚠️ Please enter your Full Name first!");
       return;
     }
     setStep(2);
@@ -219,144 +234,6 @@ export default function MultiStepDbDesigner() {
 
     setIsExporting(true);
     try {
-      const exportContainer = document.createElement("div");
-      exportContainer.style.position = "absolute";
-      exportContainer.style.left = "-9999px";
-      exportContainer.style.top = "0";
-      exportContainer.style.width = "820px";
-      exportContainer.style.backgroundColor = "#332E68";
-      exportContainer.style.padding = "30px";
-      exportContainer.style.fontFamily = "'Nunito Sans', sans-serif";
-      exportContainer.style.color = "#F4F2FA";
-      exportContainer.style.borderRadius = "12px";
-
-      const titleEl = document.createElement("h3");
-      titleEl.innerText = "Database Schema Layout";
-      titleEl.style.marginBottom = "18px";
-      titleEl.style.color = "#FFC857";
-      titleEl.style.fontSize = "16px";
-      exportContainer.appendChild(titleEl);
-
-      const tablesGrid = document.createElement("div");
-      tablesGrid.style.display = "flex";
-      tablesGrid.style.flexWrap = "wrap";
-      tablesGrid.style.gap = "18px";
-
-      tables.forEach((t) => {
-        const tableCard = document.createElement("div");
-        tableCard.style.width = "240px";
-        tableCard.style.backgroundColor = "#3A3570";
-        tableCard.style.border = "2px solid #524C99";
-        tableCard.style.borderRadius = "8px";
-        tableCard.style.overflow = "hidden";
-        tableCard.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
-
-        const header = document.createElement("div");
-        header.style.backgroundColor = "#292460";
-        header.style.padding = "10px 14px";
-        header.style.fontWeight = "bold";
-        header.style.fontSize = "14px";
-        header.style.borderBottom = "1.5px solid #524C99";
-        header.style.color = "#F4F2FA";
-        header.innerText = t.name;
-        tableCard.appendChild(header);
-
-        t.fields.forEach((f) => {
-          const fieldRow = document.createElement("div");
-          fieldRow.style.padding = "8px 14px";
-          fieldRow.style.borderBottom = "1px solid #453F85";
-          fieldRow.style.display = "flex";
-          fieldRow.style.justifyContent = "space-between";
-          fieldRow.style.alignItems = "center";
-          fieldRow.style.fontSize = "12px";
-
-          const nameSpan = document.createElement("span");
-          nameSpan.innerText = `${f.name} (${f.type})`;
-          nameSpan.style.fontWeight = "600";
-          fieldRow.appendChild(nameSpan);
-
-          const badgesDiv = document.createElement("div");
-          badgesDiv.style.display = "flex";
-          badgesDiv.style.gap = "4px";
-
-          if (f.pk) {
-            const pkBadge = document.createElement("span");
-            pkBadge.innerText = "PK";
-            pkBadge.style.backgroundColor = "#FFC857";
-            pkBadge.style.color = "#2E2A5C";
-            pkBadge.style.padding = "2px 6px";
-            pkBadge.style.borderRadius = "4px";
-            pkBadge.style.fontSize = "10px";
-            pkBadge.style.fontWeight = "bold";
-            badgesDiv.appendChild(pkBadge);
-          }
-          if (f.fk) {
-            const fkBadge = document.createElement("span");
-            fkBadge.innerText = "FK";
-            fkBadge.style.backgroundColor = "#5FD4C1";
-            fkBadge.style.color = "#2E2A5C";
-            fkBadge.style.padding = "2px 6px";
-            fkBadge.style.borderRadius = "4px";
-            fkBadge.style.fontSize = "10px";
-            fkBadge.style.fontWeight = "bold";
-            badgesDiv.appendChild(fkBadge);
-          }
-          fieldRow.appendChild(badgesDiv);
-          tableCard.appendChild(fieldRow);
-        });
-
-        tablesGrid.appendChild(tableCard);
-      });
-
-      exportContainer.appendChild(tablesGrid);
-
-      const relTitle = document.createElement("h4");
-      relTitle.innerText = "Foreign Key Relations Mapping:";
-      relTitle.style.marginTop = "22px";
-      relTitle.style.marginBottom = "8px";
-      relTitle.style.color = "#5FD4C1";
-      relTitle.style.fontSize = "14px";
-      exportContainer.appendChild(relTitle);
-
-      const relList = document.createElement("ul");
-      relList.style.paddingLeft = "20px";
-      relList.style.fontSize = "12px";
-      relList.style.color = "#D4D0F0";
-
-      let hasRel = false;
-      tables.forEach((t) => {
-        t.fields.forEach((f) => {
-          if (f.fk && f.refTable && f.refField) {
-            const targetT = tables.find((tt) => tt.id === f.refTable);
-            const targetF = targetT?.fields.find((tf) => tf.id === f.refField);
-            if (targetT && targetF) {
-              hasRel = true;
-              const li = document.createElement("li");
-              li.innerText = `${t.name}.${f.name} ──> references ──> ${targetT.name}.${targetF.name}`;
-              li.style.marginBottom = "4px";
-              relList.appendChild(li);
-            }
-          }
-        });
-      });
-
-      if (!hasRel) {
-        const li = document.createElement("li");
-        li.innerText = "No foreign key relations mapped yet.";
-        relList.appendChild(li);
-      }
-      exportContainer.appendChild(relList);
-
-      document.body.appendChild(exportContainer);
-
-      const canvasImage = await html2canvas(exportContainer, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#332E68"
-      });
-
-      document.body.removeChild(exportContainer);
-
       const doc = new jsPDF("p", "mm", "a4");
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -379,26 +256,35 @@ export default function MultiStepDbDesigner() {
       doc.line(margin, y, pageWidth - margin, y);
       y += 8;
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(46, 42, 92);
-      doc.text("Database Schema Diagram & Relations:", margin, y);
-      y += 6;
+      if (canvasRef.current) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(46, 42, 92);
+        doc.text("Database Schema Diagram:", margin, y);
+        y += 6;
 
-      const imgData = canvasImage.toDataURL("image/png");
-      const imgWidth = pageWidth - (margin * 2);
-      const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
-      
-      const maxHeight = 100;
-      let finalImgHeight = imgHeight;
-      let finalImgWidth = imgWidth;
-      if (imgHeight > maxHeight) {
-        finalImgHeight = maxHeight;
-        finalImgWidth = (canvasImage.width * maxHeight) / canvasImage.height;
+        const canvasElement = canvasRef.current;
+        const canvasImage = await html2canvas(canvasElement, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#332E68"
+        });
+        const imgData = canvasImage.toDataURL("image/png");
+        
+        const imgWidth = pageWidth - (margin * 2);
+        const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
+        
+        const maxHeight = 70;
+        let finalImgHeight = imgHeight;
+        let finalImgWidth = imgWidth;
+        if (imgHeight > maxHeight) {
+          finalImgHeight = maxHeight;
+          finalImgWidth = (canvasImage.width * maxHeight) / canvasImage.height;
+        }
+
+        doc.addImage(imgData, "PNG", margin, y, finalImgWidth, finalImgHeight);
+        y += finalImgHeight + 10;
       }
-
-      doc.addImage(imgData, "PNG", margin, y, finalImgWidth, finalImgHeight);
-      y += finalImgHeight + 10;
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -485,9 +371,10 @@ export default function MultiStepDbDesigner() {
         ::-webkit-scrollbar { width: 10px; height: 10px; }
         ::-webkit-scrollbar-track { background: #2E2A5C; }
         ::-webkit-scrollbar-thumb { background: #524C99; border-radius: 5px; }
+        .drag-handle { touch-action: none; user-select: none; }
       `}</style>
 
-      {/* TOP HEADER & STEP INDICATOR */}
+      {/* HEADER */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: "1px solid #453F85", flexShrink: 0, background: "#292460" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Database size={22} color="#FFC857" />
@@ -504,12 +391,12 @@ export default function MultiStepDbDesigner() {
         </div>
       </div>
 
-      {/* ================= STEP 1: IDENTITY & SCENARIO ================= */}
+      {/* STEP 1: IDENTITY & SCENARIO */}
       {step === 1 && (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ width: "100%", maxWidth: 520, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: 30, boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 5 }}>Welcome to Practical Mid Term Exam Grade 9</h2>
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 5 }}>Welcome to Practical Mid Term Exam</h2>
               <p style={{ fontSize: 13, color: "#A9A3E0" }}>Please fill in your student identity and select a database scenario before proceeding.</p>
             </div>
 
@@ -527,13 +414,16 @@ export default function MultiStepDbDesigner() {
 
               <div>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: "#A9A3E0", marginBottom: 6, textTransform: "uppercase" }}>Class *</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Clive Staple Lewis, Thomas Alva Edison"
+                <select
                   style={{ width: "100%" }}
                   value={studentInfo.class}
                   onChange={(e) => setStudentInfo({ ...studentInfo, class: e.target.value })}
-                />
+                >
+                  <option value="Clive Staples Lewis">Clive Staples Lewis</option>
+                  <option value="George Frideric Handel">George Frideric Handel</option>
+                  <option value="Mother Teresa">Mother Teresa</option>
+                  <option value="Thomas Alfa Edison">Thomas Alfa Edison</option>
+                </select>
               </div>
 
               <div>
@@ -543,9 +433,9 @@ export default function MultiStepDbDesigner() {
                   value={studentInfo.scenario}
                   onChange={(e) => setStudentInfo({ ...studentInfo, scenario: e.target.value })}
                 >
-                  <option value="School Library System">School Library System</option>
-                  <option value="Online Bookstore">Online Bookstore</option>
-                  <option value="School Course Enrollment">School Course Enrollment</option>
+                  <option value="School Computer Lab">School Computer Lab</option>
+                  <option value="School Sports Equipment Room">School Sports Equipment Room</option>
+                  <option value="School Cafetaria">School Cafetaria</option>
                 </select>
               </div>
             </div>
@@ -560,7 +450,7 @@ export default function MultiStepDbDesigner() {
         </div>
       )}
 
-      {/* ================= STEP 2: CANVAS DESIGNER ================= */}
+      {/* STEP 2: CANVAS DESIGNER */}
       {step === 2 && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 22px", background: "#332E68", borderBottom: "1px solid #453F85" }}>
@@ -585,7 +475,7 @@ export default function MultiStepDbDesigner() {
 
           <div
             ref={canvasRef}
-            onMouseDown={() => setSelected(null)}
+            onPointerDown={() => setSelected(null)}
             style={{
               flex: 1,
               overflow: "auto",
@@ -593,6 +483,7 @@ export default function MultiStepDbDesigner() {
               backgroundImage: "linear-gradient(#3A3570 1px, transparent 1px), linear-gradient(90deg, #3A3570 1px, transparent 1px)",
               backgroundSize: "26px 26px",
               backgroundColor: "#332E68",
+              touchAction: "pan-x pan-y",
             }}
           >
             <div style={{ position: "relative", width: canvasW, height: canvasH }}>
@@ -616,7 +507,7 @@ export default function MultiStepDbDesigner() {
               {tables.map((t) => (
                 <div
                   key={t.id}
-                  onMouseDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
                   style={{
                     position: "absolute",
                     left: t.x,
@@ -629,16 +520,17 @@ export default function MultiStepDbDesigner() {
                   }}
                 >
                   <div
-                    onMouseDown={(e) => startDrag(e, t.id)}
+                    className="drag-handle"
+                    onPointerDown={(e) => startDrag(e, t.id)}
                     style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0" }}
                   >
                     <input
                       value={t.name}
                       onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
                       style={{ flex: 1, fontWeight: 800, fontSize: 14, background: "transparent", border: "none", padding: "3px 4px" }}
                     />
-                    <button onMouseDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
+                    <button onPointerDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -671,16 +563,25 @@ export default function MultiStepDbDesigner() {
                         </div>
                         {f.fk && (
                           <div style={{ display: "flex", gap: 5 }}>
-                            <select value={f.refTable || ""} onChange={(e) => editField(t.id, f.id, { refTable: e.target.value || null, refField: null })} style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}>
-                              <option value="">which table?</option>
+                            <select 
+                              value={f.refTable || ""} 
+                              onChange={(e) => handleFkTableSelect(t.id, f.id, e.target.value || null)} 
+                              style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
+                            >
+                              <option value="">target table?</option>
                               {tables.filter((tt) => tt.id !== t.id).map((tt) => (
                                 <option key={tt.id} value={tt.id}>{tt.name}</option>
                               ))}
                             </select>
-                            <select value={f.refField || ""} onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} disabled={!f.refTable} style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}>
-                              <option value="">which field?</option>
+                            <select 
+                              value={f.refField || ""} 
+                              onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} 
+                              disabled={!f.refTable} 
+                              style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
+                            >
+                              <option value="">target field?</option>
                               {tables.find((tt) => tt.id === f.refTable)?.fields.map((tf) => (
-                                <option key={tf.id} value={tf.id}>{tf.name}</option>
+                                <option key={tf.id} value={tf.id}>{tf.name} {tf.pk ? "(PK)" : ""}</option>
                               ))}
                             </select>
                           </div>
@@ -714,127 +615,106 @@ export default function MultiStepDbDesigner() {
         </div>
       )}
 
-      {/* ================= STEP 3: EXPLANATION QUESTIONS ================= */}
+      {/* STEP 3: EXPLANATION QUESTIONS */}
       {step === 3 && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "40px 20px" }}>
-          <div 
-            style={{ 
-              width: "100%", 
-              maxWidth: 800, 
-              margin: "0 auto",
-              background: "#3A3570", 
-              border: "1.5px solid #524C99", 
-              borderRadius: 16, 
-              padding: "32px", 
-              boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
-              display: "flex", 
-              flexDirection: "column", 
-              gap: 24 
-            }}
-          >
+        <div style={{ flex: 1, overflowY: "auto", padding: "30px 20px", display: "flex", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 700, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: 30, boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 24 }}>
             <div>
-              <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, color: "#FFC857" }}>
-                Step 3: Design Explanation & Reflection
-              </h2>
-              <p style={{ fontSize: 14, color: "#A9A3E0", marginBottom: 10 }}>
-                Please explain the database logic you have designed in Step 2.
-              </p>
-              <div style={{ height: "1px", background: "#524C99", width: "100%" }}></div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 5 }}>Step 3: Design Explanation & Reflection</h2>
+              <p style={{ fontSize: 13, color: "#A9A3E0" }}>Answer the following questions based on the database schema you created in Step 2.</p>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-              {/* Question 1 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <label style={{ fontSize: 14, fontWeight: 700, lineHeight: "1.5" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
                   1. Why must data in this scenario be separated into multiple distinct tables rather than combined into one giant table?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%", padding: "12px", fontSize: "14px", lineHeight: "1.5" }}
-                  placeholder="Your explanation..."
+                  style={{ width: "100%" }}
+                  placeholder="Write your explanation here..."
                   value={explanations.separationReason}
                   onChange={(e) => setExplanations({ ...explanations, separationReason: e.target.value })}
                 />
               </div>
 
-              {/* Question 2 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <label style={{ fontSize: 14, fontWeight: 700, lineHeight: "1.5" }}>
-                  2. What is the role of the <span style={{ color: "#FFC857" }}>Primary Key (PK)</span> that you assigned in your main table?
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                  2. What is the role of the <b style={{ color: "#FFC857" }}>Primary Key (PK)</b> that you assigned in your main table?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%", padding: "12px", fontSize: "14px", lineHeight: "1.5" }}
-                  placeholder="Your explanation..."
+                  style={{ width: "100%" }}
+                  placeholder="Explain the role of the PK..."
                   value={explanations.primaryKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, primaryKeyRole: e.target.value })}
                 />
               </div>
 
-              {/* Question 3 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <label style={{ fontSize: 14, fontWeight: 700, lineHeight: "1.5" }}>
-                  3. How does a <span style={{ color: "#5FD4C1" }}>Foreign Key (FK)</span> help bridge a transaction table to a reference table?
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                  3. How does a <b style={{ color: "#5FD4C1" }}>Foreign Key (FK)</b> help bridge a transaction table to a reference table?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%", padding: "12px", fontSize: "14px", lineHeight: "1.5" }}
-                  placeholder="Your explanation..."
+                  style={{ width: "100%" }}
+                  placeholder="Explain the role of the FK as a bridge..."
                   value={explanations.foreignKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, foreignKeyRole: e.target.value })}
                 />
               </div>
 
-              {/* Question 4 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <label style={{ fontSize: 14, fontWeight: 700, lineHeight: "1.5" }}>
-                  4. How does your design prevent the repetition of duplicate data (<i style={{ color: "#A9A3E0" }}>Data Redundancy</i>)?
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                  4. How does your design prevent the repetition of duplicate data (<i>Data Redundancy</i>)?
                 </label>
                 <textarea
                   rows={3}
-                  style={{ width: "100%", padding: "12px", fontSize: "14px", lineHeight: "1.5" }}
-                  placeholder="Your explanation..."
+                  style={{ width: "100%" }}
+                  placeholder="Explain how redundancy is prevented..."
                   value={explanations.dataRedundancy}
                   onChange={(e) => setExplanations({ ...explanations, dataRedundancy: e.target.value })}
                 />
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1.5px solid #524C99", paddingTop: 24, marginTop: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #524C99", paddingTop: 20, marginTop: 10 }}>
               <button
                 onClick={() => setStep(2)}
-                style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "10px 16px", fontWeight: 600, fontSize: 14 }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
               >
-                <ArrowLeft size={18} /> Back to Design
+                <ArrowLeft size={16} /> Back to Design
               </button>
               <button
                 onClick={handleExportPDF}
                 disabled={isExporting}
-                style={{ display: "flex", alignItems: "center", gap: 8, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "12px 24px", fontWeight: 800, fontSize: 14, boxShadow: "0 4px 15px rgba(95, 212, 193, 0.3)" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "#5FD4C1", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "10px 20px", fontWeight: 800, fontSize: 13 }}
               >
-                {isExporting ? "Processing..." : "Download PDF & Submit 🚀"}
+                {isExporting ? "Generating PDF..." : "Download PDF & Submit 🚀"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ================= SQL MODAL ================= */}
+      {/* SQL Modal */}
       {sqlOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 12, padding: 24, width: "90%", maxWidth: 600, boxShadow: "0 10px 30px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: "#FFC857" }}>Generated SQL Schema</h3>
-              <button onClick={() => setSqlOpen(false)} style={{ background: "transparent", border: "none", color: "#F4F2FA" }}><X size={18} /></button>
+        <div onClick={() => setSqlOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,12,40,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "min(620px, 90vw)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#292460", border: "1.5px solid #524C99", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1.5px solid #524C99" }}>
+              <span style={{ fontWeight: 800, fontSize: 15 }}>Your design as SQL</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={copySql} style={{ display: "flex", alignItems: "center", gap: 5, background: copied ? "#5FD4C1" : "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 800 }}>
+                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+                </button>
+                <button onClick={() => setSqlOpen(false)} style={{ background: "transparent", border: "none", color: "#A9A3E0" }}>
+                  <X size={19} />
+                </button>
+              </div>
             </div>
-            <pre style={{ background: "#292460", padding: 14, borderRadius: 8, fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#5FD4C1", overflowX: "auto", maxHeight: 300 }}>
-              {buildSql()}
+            <pre style={{ margin: 0, padding: 18, overflow: "auto", fontFamily: "'JetBrains Mono', monospace", fontSize: 13, lineHeight: 1.7, color: "#E4E1F5", whiteSpace: "pre-wrap" }}>
+              {buildSql() || "-- Add a table to see its SQL here."}
             </pre>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button onClick={copySql} style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 6, padding: "8px 14px", fontWeight: 800, fontSize: 12 }}>
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied!" : "Copy SQL"}
-              </button>
-            </div>
           </div>
         </div>
       )}
