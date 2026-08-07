@@ -39,7 +39,7 @@ export default function MultiStepDbDesigner() {
   const [studentInfo, setStudentInfo] = useState({
     name: "",
     class: "Clive Staples Lewis",
-    scenario: "School Computer Lab"
+    scenario: "School Library System"
   });
 
   const [tables, setTables] = useState([
@@ -281,7 +281,7 @@ ${[...lines, ...fks].join(",\n")}
       doc.text("Mid Term Test: Database Design Report", margin, y);
       y += 8;
 
-      // Student Info
+      // Student Info Header
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(80, 80, 80);
@@ -317,7 +317,7 @@ ${[...lines, ...fks].join(",\n")}
         const maxCanvasWidth = pageWidth - (margin * 2);
         const imgHeight = (canvasImage.height * maxCanvasWidth) / canvasImage.width;
         
-        const maxHeight = 85;
+        const maxHeight = 80;
         let finalImgHeight = imgHeight;
         let finalImgWidth = maxCanvasWidth;
         if (imgHeight > maxHeight) {
@@ -328,10 +328,10 @@ ${[...lines, ...fks].join(",\n")}
         doc.addImage(imgData, "PNG", margin, y, finalImgWidth, finalImgHeight);
         y += finalImgHeight + 6;
 
-        // Add FK Relations Mapping Text
+        // Foreign Key Relations Mapping List
         if (links.length > 0) {
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(9);
+          doc.setFontSize(9.5);
           doc.setTextColor(46, 42, 92);
           doc.text("Foreign Key Relations Mapping:", margin, y);
           y += 5;
@@ -495,6 +495,7 @@ ${[...lines, ...fks].join(",\n")}
                   value={studentInfo.scenario}
                   onChange={(e) => setStudentInfo({ ...studentInfo, scenario: e.target.value })}
                 >
+                  <option value="School Library System">School Library System</option>
                   <option value="School Computer Lab">School Computer Lab</option>
                   <option value="School Sports Equipment Room">School Sports Equipment Room</option>
                   <option value="School Cafetaria">School Cafetaria</option>
@@ -512,170 +513,174 @@ ${[...lines, ...fks].join(",\n")}
         </div>
       )}
 
-      {/* STEP 2: CANVAS DESIGNER */}
-      {step === 2 && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 22px", background: "#332E68", borderBottom: "1px solid #453F85" }}>
-            <div style={{ fontSize: 13, color: "#A9A3E0" }}>
-              Scenario: <b style={{ color: "#FFC857" }}>{studentInfo.scenario}</b> &bull; Drag table headers to reposition cards.
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={addTable}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "7px 12px", fontWeight: 800, fontSize: 12 }}
-              >
-                <Plus size={15} /> Add Table
-              </button>
-              <button
-                onClick={() => setSqlOpen(true)}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "7px 12px", fontWeight: 600, fontSize: 12 }}
-              >
-                View as SQL
-              </button>
-            </div>
+      {/* STEP 2: CANVAS DESIGNER (Tetap di DOM off-screen saat di Step 3) */}
+      <div
+        style={
+          step === 2
+            ? { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }
+            : { position: "fixed", left: "-9999px", top: "-9999px", width: canvasW, height: canvasH, overflow: "hidden", pointerEvents: "none" }
+        }
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 22px", background: "#332E68", borderBottom: "1px solid #453F85" }}>
+          <div style={{ fontSize: 13, color: "#A9A3E0" }}>
+            Scenario: <b style={{ color: "#FFC857" }}>{studentInfo.scenario}</b> &bull; Drag table headers to reposition cards.
           </div>
-
-          <div
-            ref={canvasRef}
-            onPointerDown={() => setSelected(null)}
-            style={{
-              flex: 1,
-              overflow: "auto",
-              position: "relative",
-              backgroundImage: "linear-gradient(#3A3570 1px, transparent 1px), linear-gradient(90deg, #3A3570 1px, transparent 1px)",
-              backgroundSize: "26px 26px",
-              backgroundColor: "#332E68",
-              touchAction: "pan-x pan-y",
-            }}
-          >
-            <div ref={canvasInnerRef} style={{ position: "relative", width: canvasW, height: canvasH, backgroundColor: "#332E68" }}>
-              <svg width={canvasW} height={canvasH} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-                {links.map((l) => {
-                  const rightward = l.from.x < l.to.x;
-                  const x1 = rightward ? l.from.xRight : l.from.x;
-                  const x2 = rightward ? l.to.x : l.to.xRight;
-                  const midX = (x1 + x2) / 2;
-                  const color = l.active ? "#FFC857" : "#5FD4C1";
-                  return (
-                    <g key={l.id}>
-                      <path d={`M ${x1} ${l.from.y} C ${midX} ${l.from.y}, ${midX} ${l.to.y}, ${x2} ${l.to.y}`} fill="none" stroke={color} strokeWidth={l.active ? 3 : 2} opacity={l.active ? 1 : 0.65} />
-                      <circle cx={x1} cy={l.from.y} r={4} fill={color} />
-                      <circle cx={x2} cy={l.to.y} r={4} fill={color} />
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {tables.map((t) => (
-                <div
-                  key={t.id}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  style={{
-                    position: "absolute",
-                    left: t.x,
-                    top: t.y,
-                    width: TABLE_W,
-                    background: "#3A3570",
-                    border: `2px solid ${selected === t.id ? "#FFC857" : "#524C99"}`,
-                    borderRadius: 10,
-                    boxShadow: selected === t.id ? "0 0 0 4px rgba(255,200,87,0.16)" : "0 6px 16px rgba(0,0,0,0.28)",
-                  }}
-                >
-                  <div
-                    className="drag-handle"
-                    onPointerDown={(e) => startDrag(e, t.id)}
-                    style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0" }}
-                  >
-                    <input
-                      value={t.name}
-                      onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      style={{ flex: 1, fontWeight: 800, fontSize: 14, background: "transparent", border: "none", padding: "3px 4px" }}
-                    />
-                    <button onPointerDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-
-                  <div>
-                    {t.fields.map((f) => (
-                      <div key={f.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderBottom: "1px solid #453F85" }}>
-                        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                          <input value={f.name} onChange={(e) => editField(t.id, f.id, { name: e.target.value.replace(/\s+/g, "_") })} style={{ width: 84, fontSize: 12, padding: "5px 6px" }} />
-                          <select value={f.type} onChange={(e) => editField(t.id, f.id, { type: e.target.value })} style={{ flex: 1, fontSize: 11, padding: "5px 3px" }}>
-                            {DATA_TYPES.map((dt) => (
-                              <option key={dt} value={dt}>{dt}</option>
-                            ))}
-                          </select>
-                          <button onClick={() => removeField(t.id, f.id)} style={{ background: "transparent", border: "none", color: "#8A84C4", padding: 0 }} title="Delete field">
-                            <X size={14} />
-                          </button>
-                        </div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button className={`badge ${f.pk ? "on-pk" : ""}`} onClick={() => editField(t.id, f.id, { pk: !f.pk })} title="Primary Key">
-                            <Star size={11} /> PK
-                          </button>
-                          <button
-                            className={`badge ${f.fk ? "on-fk" : ""}`}
-                            onClick={() => editField(t.id, f.id, f.fk ? { fk: false, refTable: null, refField: null } : { fk: true })}
-                            title="Foreign Key"
-                          >
-                            <Link2 size={11} /> FK
-                          </button>
-                        </div>
-                        {f.fk && (
-                          <div style={{ display: "flex", gap: 5 }}>
-                            <select 
-                              value={f.refTable || ""} 
-                              onChange={(e) => handleFkTableSelect(t.id, f.id, e.target.value || null)} 
-                              style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
-                            >
-                              <option value="">target table?</option>
-                              {tables.filter((tt) => tt.id !== t.id).map((tt) => (
-                                <option key={tt.id} value={tt.id}>{tt.name}</option>
-                              ))}
-                            </select>
-                            <select 
-                              value={f.refField || ""} 
-                              onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} 
-                              disabled={!f.refTable} 
-                              style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
-                            >
-                              <option value="">target field?</option>
-                              {tables.find((tt) => tt.id === f.refTable)?.fields.map((tf) => (
-                                <option key={tf.id} value={tf.id}>{tf.name} {tf.pk ? "(PK)" : ""}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  <button onClick={() => addField(t.id)} style={{ width: "100%", height: FOOTER_H, background: "transparent", border: "none", color: "#A9A3E0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: "0 0 8px 8px" }}>
-                    <Plus size={14} /> Add field
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", background: "#292460", borderTop: "1px solid #453F85" }}>
+          <div style={{ display: "flex", gap: 10 }}>
             <button
-              onClick={() => setStep(1)}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
+              onClick={addTable}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "7px 12px", fontWeight: 800, fontSize: 12 }}
             >
-              <ArrowLeft size={16} /> Back
+              <Plus size={15} /> Add Table
             </button>
             <button
-              onClick={handleNextFromStep2}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 800, fontSize: 13 }}
+              onClick={() => setSqlOpen(true)}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "7px 12px", fontWeight: 600, fontSize: 12 }}
             >
-              Proceed to Essay Questions <ArrowRight size={16} />
+              View as SQL
             </button>
           </div>
         </div>
-      )}
+
+        <div
+          ref={canvasRef}
+          onPointerDown={() => setSelected(null)}
+          style={{
+            flex: 1,
+            overflow: "auto",
+            position: "relative",
+            backgroundImage: "linear-gradient(#3A3570 1px, transparent 1px), linear-gradient(90deg, #3A3570 1px, transparent 1px)",
+            backgroundSize: "26px 26px",
+            backgroundColor: "#332E68",
+            touchAction: "pan-x pan-y",
+          }}
+        >
+          <div ref={canvasInnerRef} style={{ position: "relative", width: canvasW, height: canvasH, backgroundColor: "#332E68" }}>
+            <svg width={canvasW} height={canvasH} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+              {links.map((l) => {
+                const rightward = l.from.x < l.to.x;
+                const x1 = rightward ? l.from.xRight : l.from.x;
+                const x2 = rightward ? l.to.x : l.to.xRight;
+                const midX = (x1 + x2) / 2;
+                const color = l.active ? "#FFC857" : "#5FD4C1";
+                return (
+                  <g key={l.id}>
+                    <path d={`M ${x1} ${l.from.y} C ${midX} ${l.from.y}, ${midX} ${l.to.y}, ${x2} ${l.to.y}`} fill="none" stroke={color} strokeWidth={l.active ? 3 : 2} opacity={l.active ? 1 : 0.65} />
+                    <circle cx={x1} cy={l.from.y} r={4} fill={color} />
+                    <circle cx={x2} cy={l.to.y} r={4} fill={color} />
+                  </g>
+                );
+              })}
+            </svg>
+
+            {tables.map((t) => (
+              <div
+                key={t.id}
+                onPointerDown={(e) => e.stopPropagation()}
+                style={{
+                  position: "absolute",
+                  left: t.x,
+                  top: t.y,
+                  width: TABLE_W,
+                  background: "#3A3570",
+                  border: `2px solid ${selected === t.id ? "#FFC857" : "#524C99"}`,
+                  borderRadius: 10,
+                  boxShadow: selected === t.id ? "0 0 0 4px rgba(255,200,87,0.16)" : "0 6px 16px rgba(0,0,0,0.28)",
+                }}
+              >
+                <div
+                  className="drag-handle"
+                  onPointerDown={(e) => startDrag(e, t.id)}
+                  style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0" }}
+                >
+                  <input
+                    value={t.name}
+                    onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    style={{ flex: 1, fontWeight: 800, fontSize: 14, background: "transparent", border: "none", padding: "3px 4px" }}
+                  />
+                  <button onPointerDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+
+                <div>
+                  {t.fields.map((f) => (
+                    <div key={f.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderBottom: "1px solid #453F85" }}>
+                      <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                        <input value={f.name} onChange={(e) => editField(t.id, f.id, { name: e.target.value.replace(/\s+/g, "_") })} style={{ width: 84, fontSize: 12, padding: "5px 6px" }} />
+                        <select value={f.type} onChange={(e) => editField(t.id, f.id, { type: e.target.value })} style={{ flex: 1, fontSize: 11, padding: "5px 3px" }}>
+                          {DATA_TYPES.map((dt) => (
+                            <option key={dt} value={dt}>{dt}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => removeField(t.id, f.id)} style={{ background: "transparent", border: "none", color: "#8A84C4", padding: 0 }} title="Delete field">
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className={`badge ${f.pk ? "on-pk" : ""}`} onClick={() => editField(t.id, f.id, { pk: !f.pk })} title="Primary Key">
+                          <Star size={11} /> PK
+                        </button>
+                        <button
+                          className={`badge ${f.fk ? "on-fk" : ""}`}
+                          onClick={() => editField(t.id, f.id, f.fk ? { fk: false, refTable: null, refField: null } : { fk: true })}
+                          title="Foreign Key"
+                        >
+                          <Link2 size={11} /> FK
+                        </button>
+                      </div>
+                      {f.fk && (
+                        <div style={{ display: "flex", gap: 5 }}>
+                          <select 
+                            value={f.refTable || ""} 
+                            onChange={(e) => handleFkTableSelect(t.id, f.id, e.target.value || null)} 
+                            style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
+                          >
+                            <option value="">target table?</option>
+                            {tables.filter((tt) => tt.id !== t.id).map((tt) => (
+                              <option key={tt.id} value={tt.id}>{tt.name}</option>
+                            ))}
+                          </select>
+                          <select 
+                            value={f.refField || ""} 
+                            onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} 
+                            disabled={!f.refTable} 
+                            style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
+                          >
+                            <option value="">target field?</option>
+                            {tables.find((tt) => tt.id === f.refTable)?.fields.map((tf) => (
+                              <option key={tf.id} value={tf.id}>{tf.name} {tf.pk ? "(PK)" : ""}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={() => addField(t.id)} style={{ width: "100%", height: FOOTER_H, background: "transparent", border: "none", color: "#A9A3E0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: "0 0 8px 8px" }}>
+                  <Plus size={14} /> Add field
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", background: "#292460", borderTop: "1px solid #453F85" }}>
+          <button
+            onClick={() => setStep(1)}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
+          >
+            <ArrowLeft size={16} /> Back
+          </button>
+          <button
+            onClick={handleNextFromStep2}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 800, fontSize: 13 }}
+          >
+            Proceed to Essay Questions <ArrowRight size={16} />
+          </button>
+        </div>
+      </div>
 
       {/* STEP 3: EXPLANATION QUESTIONS */}
       {step === 3 && (
