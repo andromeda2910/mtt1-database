@@ -19,7 +19,7 @@ function newField(name = "field_name") {
 function newTable(x, y, index) {
   return {
     id: uid(),
-    name: `Table_${index}`,
+    name: `Table${index}`,
     x,
     y,
     fields: [{ ...newField("ID"), pk: true }],
@@ -38,11 +38,11 @@ export default function MultiStepDbDesigner() {
   const [step, setStep] = useState(1);
   const [studentInfo, setStudentInfo] = useState({
     name: "",
-    class: "Clive Staples Lewis",
+    class: "",
     scenario: "School Library System"
   });
 
-  const [tables, setTables] = useState([
+  const [tables, setTables] = useState(() => [
     {
       id: "t_students",
       name: "Students",
@@ -83,15 +83,14 @@ export default function MultiStepDbDesigner() {
   const [isExporting, setIsExporting] = useState(false);
   
   const canvasRef = useRef(null);
-  const canvasInnerRef = useRef(null);
   const dragRef = useRef(null);
   const counter = useRef(4);
 
   const [explanations, setExplanations] = useState({
-    threeTablesBenefit: "",
+    separationReason: "",
     primaryKeyRole: "",
     foreignKeyRole: "",
-    removedFkConsequences: ""
+    fkRemovedProblems: ""
   });
 
   const updateTable = useCallback((id, fn) => {
@@ -100,7 +99,7 @@ export default function MultiStepDbDesigner() {
 
   const addTable = () => {
     const n = counter.current++;
-    const t = newTable(60 + ((n * 30) % 200), 60 + ((n * 30) % 150), n);
+    const t = newTable(70 + ((n * 40) % 300), 70 + ((n * 40) % 200), n);
     setTables((prev) => [...prev, t]);
     setSelected(t.id);
   };
@@ -116,78 +115,36 @@ export default function MultiStepDbDesigner() {
     );
   };
 
-  const addField = (id) => updateTable(id, (t) => ({ ...t, fields: [...t.fields, newField(`field_${t.fields.length + 1}`)] }));
+  const addField = (id) => updateTable(id, (t) => ({ ...t, fields: [...t.fields, newField(`field${t.fields.length + 1}`)] }));
   const removeField = (id, fid) => updateTable(id, (t) => ({ ...t, fields: t.fields.filter((f) => f.id !== fid) }));
   const editField = (id, fid, patch) =>
     updateTable(id, (t) => ({ ...t, fields: t.fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) }));
 
-  const handleFkTableSelect = (tableId, fieldId, refTableId) => {
-    if (!refTableId) {
-      editField(tableId, fieldId, { refTable: null, refField: null });
-      return;
-    }
-
-    const targetTable = tables.find((t) => t.id === refTableId);
-    if (!targetTable) return;
-
-    const targetPkField = targetTable.fields.find((f) => f.pk) || targetTable.fields[0];
-
-    if (targetPkField) {
-      editField(tableId, fieldId, {
-        refTable: refTableId,
-        refField: targetPkField.id,
-        name: targetPkField.name,
-        type: targetPkField.type
-      });
-    } else {
-      editField(tableId, fieldId, { refTable: refTableId, refField: null });
-    }
-  };
-
   const startDrag = (e, id) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    if (e.target.setPointerCapture) {
-      e.target.setPointerCapture(e.pointerId);
-    }
-
     const rect = canvas.getBoundingClientRect();
     const t = tables.find((tt) => tt.id === id);
-    dragRef.current = { 
-      id, 
-      pointerId: e.pointerId,
-      offX: e.clientX - rect.left + canvas.scrollLeft - t.x, 
-      offY: e.clientY - rect.top + canvas.scrollTop - t.y 
-    };
+    dragRef.current = { id, offX: e.clientX - rect.left + canvas.scrollLeft - t.x, offY: e.clientY - rect.top + canvas.scrollTop - t.y };
     setSelected(id);
-    
-    window.addEventListener("pointermove", onDrag);
-    window.addEventListener("pointerup", endDrag);
-    window.addEventListener("pointercancel", endDrag);
+    window.addEventListener("mousemove", onDrag);
+    window.addEventListener("mouseup", endDrag);
   };
 
   const onDrag = useCallback((e) => {
     const d = dragRef.current;
     const canvas = canvasRef.current;
     if (!d || !canvas) return;
-
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, e.clientX - rect.left + canvas.scrollLeft - d.offX);
     const y = Math.max(0, e.clientY - rect.top + canvas.scrollTop - d.offY);
     setTables((prev) => prev.map((t) => (t.id === d.id ? { ...t, x, y } : t)));
   }, []);
 
-  const endDrag = useCallback((e) => {
-    if (dragRef.current && e?.target?.releasePointerCapture && dragRef.current.pointerId !== undefined) {
-      try {
-        e.target.releasePointerCapture(dragRef.current.pointerId);
-      } catch {}
-    }
+  const endDrag = useCallback(() => {
     dragRef.current = null;
-    window.removeEventListener("pointermove", onDrag);
-    window.removeEventListener("pointerup", endDrag);
-    window.removeEventListener("pointercancel", endDrag);
+    window.removeEventListener("mousemove", onDrag);
+    window.removeEventListener("mouseup", endDrag);
   }, [onDrag]);
 
   const links = useMemo(() => {
@@ -201,10 +158,6 @@ export default function MultiStepDbDesigner() {
           if (ti === -1) return;
           out.push({
             id: `${f.id}-${f.refField}`,
-            fromTable: t.name,
-            fromField: f.name,
-            toTable: target.name,
-            toField: target.fields[ti]?.name,
             from: fieldPos(t, i),
             to: fieldPos(target, ti),
             active: selected === t.id || selected === target.id,
@@ -215,8 +168,8 @@ export default function MultiStepDbDesigner() {
     return out;
   }, [tables, selected]);
 
-  const canvasW = Math.max(1050, ...tables.map((t) => t.x + TABLE_W + 100));
-  const canvasH = Math.max(550, ...tables.map((t) => t.y + tableHeight(t) + 100));
+  const canvasW = Math.max(1200, ...tables.map((t) => t.x + TABLE_W + 160));
+  const canvasH = Math.max(700, ...tables.map((t) => t.y + tableHeight(t) + 160));
 
   const buildSql = () =>
     tables
@@ -230,9 +183,7 @@ export default function MultiStepDbDesigner() {
             return target && tf ? `  FOREIGN KEY (${f.name}) REFERENCES ${target.name}(${tf.name})` : null;
           })
           .filter(Boolean);
-        return `CREATE TABLE ${t.name} (
-${[...lines, ...fks].join(",\n")}
-);`;
+        return `CREATE TABLE ${t.name} (\n${[...lines, ...fks].join(",\n")}\n);`;
       })
       .join("\n\n");
 
@@ -245,8 +196,8 @@ ${[...lines, ...fks].join(",\n")}
   };
 
   const handleNextFromStep1 = () => {
-    if (!studentInfo.name.trim()) {
-      alert("⚠️ Please enter your Full Name first!");
+    if (!studentInfo.name.trim() || !studentInfo.class.trim()) {
+      alert("⚠️ Please enter your Full Name and Class first!");
       return;
     }
     setStep(2);
@@ -261,12 +212,15 @@ ${[...lines, ...fks].join(",\n")}
   };
 
   const handleExportPDF = async () => {
-    if (!explanations.threeTablesBenefit || !explanations.primaryKeyRole) {
-      alert("⚠️ Please fill out at least the key reflection questions before submitting!");
+    if (!explanations.separationReason || !explanations.primaryKeyRole) {
+      alert("⚠️ Please fill out the reflection questions before submitting!");
       return;
     }
 
     setIsExporting(true);
+    // Beri jeda waktu agar React melakukan re-render elemen ke versi teks sebelum html2canvas mengambil snapshot
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
     try {
       const doc = new jsPDF("p", "mm", "a4");
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -274,15 +228,14 @@ ${[...lines, ...fks].join(",\n")}
       const margin = 15;
       let y = margin;
 
-      // Header Title
+      // Header Report
       doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
       doc.setTextColor(46, 42, 92);
       doc.text("Mid Term Test: Database Design Report", margin, y);
       y += 8;
 
-      // Student Info Header
-      doc.setFontSize(10);
+      doc.setFontSize(11);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(80, 80, 80);
       doc.text(`Full Name: ${studentInfo.name}  |  Class: ${studentInfo.class}  |  Scenario: ${studentInfo.scenario}`, margin, y);
@@ -292,71 +245,78 @@ ${[...lines, ...fks].join(",\n")}
       doc.line(margin, y, pageWidth - margin, y);
       y += 8;
 
-      // Render Database Schema Canvas as Image
-      const targetElement = canvasInnerRef.current || canvasRef.current;
-      if (targetElement) {
+      // Capture Database Schema Canvas
+      if (canvasRef.current) {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
+        doc.setFontSize(12);
         doc.setTextColor(46, 42, 92);
         doc.text("Database Schema Diagram & Relations:", margin, y);
         y += 6;
 
-        const canvasImage = await html2canvas(targetElement, {
+        const canvasElement = canvasRef.current;
+        const canvasImage = await html2canvas(canvasElement, {
           scale: 2,
           useCORS: true,
-          backgroundColor: "#332E68",
-          scrollX: 0,
-          scrollY: 0,
-          width: canvasW,
-          height: canvasH,
-          windowWidth: canvasW,
-          windowHeight: canvasH
+          backgroundColor: "#332E68"
         });
         const imgData = canvasImage.toDataURL("image/png");
         
-        const maxCanvasWidth = pageWidth - (margin * 2);
-        const imgHeight = (canvasImage.height * maxCanvasWidth) / canvasImage.width;
+        const imgWidth = pageWidth - (margin * 2);
+        const imgHeight = (canvasImage.height * imgWidth) / canvasImage.width;
         
-        const maxHeight = 80;
+        const maxHeight = 85;
         let finalImgHeight = imgHeight;
-        let finalImgWidth = maxCanvasWidth;
+        let finalImgWidth = imgWidth;
         if (imgHeight > maxHeight) {
           finalImgHeight = maxHeight;
           finalImgWidth = (canvasImage.width * maxHeight) / canvasImage.height;
         }
 
         doc.addImage(imgData, "PNG", margin, y, finalImgWidth, finalImgHeight);
-        y += finalImgHeight + 6;
+        y += finalImgHeight + 8;
+      }
 
-        // Foreign Key Relations Mapping List
-        if (links.length > 0) {
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(9.5);
-          doc.setTextColor(46, 42, 92);
-          doc.text("Foreign Key Relations Mapping:", margin, y);
+      // Foreign Key Relations Mapping Section
+      const fkMappings = [];
+      tables.forEach((t) => {
+        t.fields.forEach((f) => {
+          if (f.fk && f.refTable && f.refField) {
+            const refT = tables.find((tt) => tt.id === f.refTable);
+            const refF = refT?.fields.find((ff) => ff.id === f.refField);
+            if (refT && refF) {
+              fkMappings.push(`${t.name}.${f.name} -> references -> ${refT.name}.${refF.name}`);
+            }
+          }
+        });
+      });
+
+      if (fkMappings.length > 0) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(46, 42, 92);
+        doc.text("Foreign Key Relations Mapping:", margin, y);
+        y += 5;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(60, 60, 60);
+        fkMappings.forEach((mapping) => {
+          doc.text(`•  ${mapping}`, margin + 3, y);
           y += 5;
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8.5);
-          doc.setTextColor(90, 90, 90);
-          links.forEach((l) => {
-            doc.text(`• ${l.fromTable}.${l.fromField}  ──references──>  ${l.toTable}.${l.toField}`, margin + 3, y);
-            y += 4;
-          });
-          y += 4;
-        }
+        });
+        y += 4;
       }
 
       // Essay Questions Section
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
+      doc.setFontSize(12);
       doc.setTextColor(46, 42, 92);
       doc.text("Design Explanations & Reflections:", margin, y);
       y += 6;
 
-      doc.setFontSize(9.5);
+      doc.setFontSize(10);
       const addAnswerSection = (title, answer) => {
-        if (y > pageHeight - 35) {
+        if (y > pageHeight - 30) {
           doc.addPage();
           y = margin;
         }
@@ -369,15 +329,15 @@ ${[...lines, ...fks].join(",\n")}
         doc.setTextColor(80, 80, 80);
         const splitText = doc.splitTextToSize(answer || "-", pageWidth - (margin * 2));
         doc.text(splitText, margin, y);
-        y += (splitText.length * 4.5) + 6;
+        y += (splitText.length * 5) + 6;
       };
 
-      addAnswerSection("1. Why is organising data into three related tables better than one table?", explanations.threeTablesBenefit);
+      addAnswerSection("1. Why is organising data into three related tables better than one table?", explanations.separationReason);
       addAnswerSection("2. How Primary Keys help keep database organised and accurate:", explanations.primaryKeyRole);
       addAnswerSection("3. How Foreign Keys help different tables work together:", explanations.foreignKeyRole);
-      addAnswerSection("4. Problems that might occur if Foreign Keys were removed:", explanations.removedFkConsequences);
+      addAnswerSection("4. Problems that might occur if Foreign Keys were removed:", explanations.fkRemovedProblems);
 
-      doc.save(`Database_Design_${studentInfo.name.replace(/\s+/g, "_")}.pdf`);
+      doc.save(`Database_Design_${studentInfo.name.replace(/\s+/g, "_") || "Report"}.pdf`);
       alert("🎉 Success! Your PDF report with the database diagram has been downloaded.");
     } catch (err) {
       console.error(err);
@@ -418,10 +378,10 @@ ${[...lines, ...fks].join(",\n")}
         .badge {
           border: 1.5px solid #524C99;
           border-radius: 6px;
-          padding: 5px 9px;
-          font-size: 12px;
+          padding: 4px 8px;
+          font-size: 11px;
           font-weight: 800;
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 4px;
           background: transparent;
@@ -433,10 +393,9 @@ ${[...lines, ...fks].join(",\n")}
         ::-webkit-scrollbar { width: 10px; height: 10px; }
         ::-webkit-scrollbar-track { background: #2E2A5C; }
         ::-webkit-scrollbar-thumb { background: #524C99; border-radius: 5px; }
-        .drag-handle { touch-action: none; user-select: none; }
       `}</style>
 
-      {/* HEADER */}
+      {/* TOP HEADER & STEP INDICATOR */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: "1px solid #453F85", flexShrink: 0, background: "#292460" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Database size={22} color="#FFC857" />
@@ -453,7 +412,7 @@ ${[...lines, ...fks].join(",\n")}
         </div>
       </div>
 
-      {/* STEP 1: IDENTITY & SCENARIO */}
+      {/* ================= STEP 1: IDENTITY & SCENARIO ================= */}
       {step === 1 && (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ width: "100%", maxWidth: 520, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: 30, boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 20 }}>
@@ -476,16 +435,13 @@ ${[...lines, ...fks].join(",\n")}
 
               <div>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: "#A9A3E0", marginBottom: 6, textTransform: "uppercase" }}>Class *</label>
-                <select
+                <input
+                  type="text"
+                  placeholder="e.g., 9A"
                   style={{ width: "100%" }}
                   value={studentInfo.class}
                   onChange={(e) => setStudentInfo({ ...studentInfo, class: e.target.value })}
-                >
-                  <option value="Clive Staples Lewis">Clive Staples Lewis</option>
-                  <option value="George Frideric Handel">George Frideric Handel</option>
-                  <option value="Mother Teresa">Mother Teresa</option>
-                  <option value="Thomas Alfa Edison">Thomas Alfa Edison</option>
-                </select>
+                />
               </div>
 
               <div>
@@ -496,9 +452,8 @@ ${[...lines, ...fks].join(",\n")}
                   onChange={(e) => setStudentInfo({ ...studentInfo, scenario: e.target.value })}
                 >
                   <option value="School Library System">School Library System</option>
-                  <option value="School Computer Lab">School Computer Lab</option>
-                  <option value="School Sports Equipment Room">School Sports Equipment Room</option>
-                  <option value="School Cafetaria">School Cafetaria</option>
+                  <option value="Online Bookstore">Online Bookstore</option>
+                  <option value="School Course Enrollment">School Course Enrollment</option>
                 </select>
               </div>
             </div>
@@ -513,176 +468,189 @@ ${[...lines, ...fks].join(",\n")}
         </div>
       )}
 
-      {/* STEP 2: CANVAS DESIGNER (Tetap di DOM off-screen saat di Step 3) */}
-      <div
-        style={
-          step === 2
-            ? { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }
-            : { position: "fixed", left: "-9999px", top: "-9999px", width: canvasW, height: canvasH, overflow: "hidden", pointerEvents: "none" }
-        }
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 22px", background: "#332E68", borderBottom: "1px solid #453F85" }}>
-          <div style={{ fontSize: 13, color: "#A9A3E0" }}>
-            Scenario: <b style={{ color: "#FFC857" }}>{studentInfo.scenario}</b> &bull; Drag table headers to reposition cards.
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              onClick={addTable}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "7px 12px", fontWeight: 800, fontSize: 12 }}
-            >
-              <Plus size={15} /> Add Table
-            </button>
-            <button
-              onClick={() => setSqlOpen(true)}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "7px 12px", fontWeight: 600, fontSize: 12 }}
-            >
-              View as SQL
-            </button>
-          </div>
-        </div>
-
-        <div
-          ref={canvasRef}
-          onPointerDown={() => setSelected(null)}
-          style={{
-            flex: 1,
-            overflow: "auto",
-            position: "relative",
-            backgroundImage: "linear-gradient(#3A3570 1px, transparent 1px), linear-gradient(90deg, #3A3570 1px, transparent 1px)",
-            backgroundSize: "26px 26px",
-            backgroundColor: "#332E68",
-            touchAction: "pan-x pan-y",
-          }}
-        >
-          <div ref={canvasInnerRef} style={{ position: "relative", width: canvasW, height: canvasH, backgroundColor: "#332E68" }}>
-            <svg width={canvasW} height={canvasH} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
-              {links.map((l) => {
-                const rightward = l.from.x < l.to.x;
-                const x1 = rightward ? l.from.xRight : l.from.x;
-                const x2 = rightward ? l.to.x : l.to.xRight;
-                const midX = (x1 + x2) / 2;
-                const color = l.active ? "#FFC857" : "#5FD4C1";
-                return (
-                  <g key={l.id}>
-                    <path d={`M ${x1} ${l.from.y} C ${midX} ${l.from.y}, ${midX} ${l.to.y}, ${x2} ${l.to.y}`} fill="none" stroke={color} strokeWidth={l.active ? 3 : 2} opacity={l.active ? 1 : 0.65} />
-                    <circle cx={x1} cy={l.from.y} r={4} fill={color} />
-                    <circle cx={x2} cy={l.to.y} r={4} fill={color} />
-                  </g>
-                );
-              })}
-            </svg>
-
-            {tables.map((t) => (
-              <div
-                key={t.id}
-                onPointerDown={(e) => e.stopPropagation()}
-                style={{
-                  position: "absolute",
-                  left: t.x,
-                  top: t.y,
-                  width: TABLE_W,
-                  background: "#3A3570",
-                  border: `2px solid ${selected === t.id ? "#FFC857" : "#524C99"}`,
-                  borderRadius: 10,
-                  boxShadow: selected === t.id ? "0 0 0 4px rgba(255,200,87,0.16)" : "0 6px 16px rgba(0,0,0,0.28)",
-                }}
+      {/* ================= STEP 2: CANVAS DESIGNER ================= */}
+      {step === 2 && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 22px", background: "#332E68", borderBottom: "1px solid #453F85" }}>
+            <div style={{ fontSize: 13, color: "#A9A3E0" }}>
+              Scenario: <b style={{ color: "#FFC857" }}>{studentInfo.scenario}</b> &bull; Drag table headers to reposition cards.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={addTable}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "7px 12px", fontWeight: 800, fontSize: 12 }}
               >
+                <Plus size={15} /> Add Table
+              </button>
+              <button
+                onClick={() => setSqlOpen(true)}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "7px 12px", fontWeight: 600, fontSize: 12 }}
+              >
+                View as SQL
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref={canvasRef}
+            onMouseDown={() => setSelected(null)}
+            style={{
+              flex: 1,
+              overflow: "auto",
+              position: "relative",
+              backgroundImage: "linear-gradient(#3A3570 1px, transparent 1px), linear-gradient(90deg, #3A3570 1px, transparent 1px)",
+              backgroundSize: "26px 26px",
+              backgroundColor: "#332E68",
+            }}
+          >
+            <div style={{ position: "relative", width: canvasW, height: canvasH }}>
+              <svg width={canvasW} height={canvasH} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+                {links.map((l) => {
+                  const rightward = l.from.x < l.to.x;
+                  const x1 = rightward ? l.from.xRight : l.from.x;
+                  const x2 = rightward ? l.to.x : l.to.xRight;
+                  const midX = (x1 + x2) / 2;
+                  const color = l.active ? "#FFC857" : "#5FD4C1";
+                  return (
+                    <g key={l.id}>
+                      <path d={`M ${x1} ${l.from.y} C ${midX} ${l.from.y}, ${midX} ${l.to.y}, ${x2} ${l.to.y}`} fill="none" stroke={color} strokeWidth={l.active ? 3 : 2} opacity={l.active ? 1 : 0.65} />
+                      <circle cx={x1} cy={l.from.y} r={4} fill={color} />
+                      <circle cx={x2} cy={l.to.y} r={4} fill={color} />
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {tables.map((t) => (
                 <div
-                  className="drag-handle"
-                  onPointerDown={(e) => startDrag(e, t.id)}
-                  style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0" }}
+                  key={t.id}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  style={{
+                    position: "absolute",
+                    left: t.x,
+                    top: t.y,
+                    width: TABLE_W,
+                    background: "#3A3570",
+                    border: `2px solid ${selected === t.id ? "#FFC857" : "#524C99"}`,
+                    borderRadius: 10,
+                    boxShadow: selected === t.id ? "0 0 0 4px rgba(255,200,87,0.16)" : "0 6px 16px rgba(0,0,0,0.28)",
+                  }}
                 >
-                  <input
-                    value={t.name}
-                    onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    style={{ flex: 1, fontWeight: 800, fontSize: 14, background: "transparent", border: "none", padding: "3px 4px" }}
-                  />
-                  <button onPointerDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
-                    <Trash2 size={15} />
-                  </button>
-                </div>
+                  <div
+                    onMouseDown={(e) => startDrag(e, t.id)}
+                    style={{ height: HEADER_H, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", cursor: "grab", borderBottom: "1.5px solid #524C99", background: "#292460", borderRadius: "8px 8px 0 0" }}
+                  >
+                    {isExporting ? (
+                      <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: "#F4F2FA", padding: "3px 4px" }}>
+                        {t.name}
+                      </span>
+                    ) : (
+                      <input
+                        value={t.name}
+                        onChange={(e) => updateTable(t.id, (tt) => ({ ...tt, name: e.target.value.replace(/\s+/g, "_") }))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{ flex: 1, fontWeight: 800, fontSize: 14, background: "transparent", border: "none", padding: "3px 4px" }}
+                      />
+                    )}
+                    {!isExporting && (
+                      <button onMouseDown={(e) => e.stopPropagation()} onClick={() => removeTable(t.id)} style={{ background: "transparent", border: "none", color: "#F08A6C", padding: 2 }} title="Delete table">
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
 
-                <div>
-                  {t.fields.map((f) => (
-                    <div key={f.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderBottom: "1px solid #453F85" }}>
-                      <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                        <input value={f.name} onChange={(e) => editField(t.id, f.id, { name: e.target.value.replace(/\s+/g, "_") })} style={{ width: 84, fontSize: 12, padding: "5px 6px" }} />
-                        <select value={f.type} onChange={(e) => editField(t.id, f.id, { type: e.target.value })} style={{ flex: 1, fontSize: 11, padding: "5px 3px" }}>
-                          {DATA_TYPES.map((dt) => (
-                            <option key={dt} value={dt}>{dt}</option>
-                          ))}
-                        </select>
-                        <button onClick={() => removeField(t.id, f.id)} style={{ background: "transparent", border: "none", color: "#8A84C4", padding: 0 }} title="Delete field">
-                          <X size={14} />
-                        </button>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button className={`badge ${f.pk ? "on-pk" : ""}`} onClick={() => editField(t.id, f.id, { pk: !f.pk })} title="Primary Key">
-                          <Star size={11} /> PK
-                        </button>
-                        <button
-                          className={`badge ${f.fk ? "on-fk" : ""}`}
-                          onClick={() => editField(t.id, f.id, f.fk ? { fk: false, refTable: null, refField: null } : { fk: true })}
-                          title="Foreign Key"
-                        >
-                          <Link2 size={11} /> FK
-                        </button>
-                      </div>
-                      {f.fk && (
-                        <div style={{ display: "flex", gap: 5 }}>
-                          <select 
-                            value={f.refTable || ""} 
-                            onChange={(e) => handleFkTableSelect(t.id, f.id, e.target.value || null)} 
-                            style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
-                          >
-                            <option value="">target table?</option>
-                            {tables.filter((tt) => tt.id !== t.id).map((tt) => (
-                              <option key={tt.id} value={tt.id}>{tt.name}</option>
-                            ))}
-                          </select>
-                          <select 
-                            value={f.refField || ""} 
-                            onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} 
-                            disabled={!f.refTable} 
-                            style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}
-                          >
-                            <option value="">target field?</option>
-                            {tables.find((tt) => tt.id === f.refTable)?.fields.map((tf) => (
-                              <option key={tf.id} value={tf.id}>{tf.name} {tf.pk ? "(PK)" : ""}</option>
-                            ))}
-                          </select>
+                  <div>
+                    {t.fields.map((f) => (
+                      <div key={f.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderBottom: "1px solid #453F85" }}>
+                        {isExporting ? (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "2px 0" }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: "#F4F2FA" }}>{f.name}</span>
+                            <span style={{ color: "#A9A3E0", fontSize: 12, fontWeight: 600 }}>({f.type})</span>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                            <input value={f.name} onChange={(e) => editField(t.id, f.id, { name: e.target.value.replace(/\s+/g, "_") })} style={{ width: 84, fontSize: 12, padding: "5px 6px" }} />
+                            <select value={f.type} onChange={(e) => editField(t.id, f.id, { type: e.target.value })} style={{ flex: 1, fontSize: 11, padding: "5px 3px" }}>
+                              {DATA_TYPES.map((dt) => (
+                                <option key={dt} value={dt}>{dt}</option>
+                              ))}
+                            </select>
+                            <button onClick={() => removeField(t.id, f.id)} style={{ background: "transparent", border: "none", color: "#8A84C4", padding: 0 }} title="Delete field">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {isExporting ? (
+                            <>
+                              {f.pk && <span className="badge on-pk"><Star size={11} /> PK</span>}
+                              {f.fk && <span className="badge on-fk"><Link2 size={11} /> FK</span>}
+                            </>
+                          ) : (
+                            <>
+                              <button className={`badge ${f.pk ? "on-pk" : ""}`} onClick={() => editField(t.id, f.id, { pk: !f.pk })} title="Primary Key">
+                                <Star size={11} /> PK
+                              </button>
+                              <button
+                                className={`badge ${f.fk ? "on-fk" : ""}`}
+                                onClick={() => editField(t.id, f.id, f.fk ? { fk: false, refTable: null, refField: null } : { fk: true })}
+                                title="Foreign Key"
+                              >
+                                <Link2 size={11} /> FK
+                              </button>
+                            </>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
 
-                <button onClick={() => addField(t.id)} style={{ width: "100%", height: FOOTER_H, background: "transparent", border: "none", color: "#A9A3E0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: "0 0 8px 8px" }}>
-                  <Plus size={14} /> Add field
-                </button>
-              </div>
-            ))}
+                        {!isExporting && f.fk && (
+                          <div style={{ display: "flex", gap: 5 }}>
+                            <select value={f.refTable || ""} onChange={(e) => editField(t.id, f.id, { refTable: e.target.value || null, refField: null })} style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}>
+                              <option value="">which table?</option>
+                              {tables.filter((tt) => tt.id !== t.id).map((tt) => (
+                                <option key={tt.id} value={tt.id}>{tt.name}</option>
+                              ))}
+                            </select>
+                            <select value={f.refField || ""} onChange={(e) => editField(t.id, f.id, { refField: e.target.value || null })} disabled={!f.refTable} style={{ flex: 1, fontSize: 11, padding: "5px 3px", borderColor: "#5FD4C1" }}>
+                              <option value="">which field?</option>
+                              {tables.find((tt) => tt.id === f.refTable)?.fields.map((tf) => (
+                                <option key={tf.id} value={tf.id}>{tf.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {!isExporting && (
+                    <button onClick={() => addField(t.id)} style={{ width: "100%", height: FOOTER_H, background: "transparent", border: "none", color: "#A9A3E0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: "0 0 8px 8px" }}>
+                      <Plus size={14} /> Add field
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", background: "#292460", borderTop: "1px solid #453F85" }}>
+            <button
+              onClick={() => setStep(1)}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
+            >
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button
+              onClick={handleNextFromStep2}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 800, fontSize: 13 }}
+            >
+              Proceed to Essay Questions <ArrowRight size={16} />
+            </button>
           </div>
         </div>
+      )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 22px", background: "#292460", borderTop: "1px solid #453F85" }}>
-          <button
-            onClick={() => setStep(1)}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#F4F2FA", border: "1.5px solid #524C99", borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 13 }}
-          >
-            <ArrowLeft size={16} /> Back
-          </button>
-          <button
-            onClick={handleNextFromStep2}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: "#FFC857", color: "#2E2A5C", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 800, fontSize: 13 }}
-          >
-            Proceed to Essay Questions <ArrowRight size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* STEP 3: EXPLANATION QUESTIONS */}
+      {/* ================= STEP 3: EXPLANATION QUESTIONS ================= */}
       {step === 3 && (
         <div style={{ flex: 1, overflowY: "auto", padding: "30px 20px", display: "flex", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: 700, background: "#3A3570", border: "1.5px solid #524C99", borderRadius: 16, padding: 30, boxShadow: "0 10px 25px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 24 }}>
@@ -700,8 +668,8 @@ ${[...lines, ...fks].join(",\n")}
                   rows={3}
                   style={{ width: "100%" }}
                   placeholder="Write your explanation here..."
-                  value={explanations.threeTablesBenefit}
-                  onChange={(e) => setExplanations({ ...explanations, threeTablesBenefit: e.target.value })}
+                  value={explanations.separationReason}
+                  onChange={(e) => setExplanations({ ...explanations, separationReason: e.target.value })}
                 />
               </div>
 
@@ -712,7 +680,7 @@ ${[...lines, ...fks].join(",\n")}
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
-                  placeholder="Explain the role of Primary Keys..."
+                  placeholder="Explain how Primary Keys maintain order and accuracy..."
                   value={explanations.primaryKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, primaryKeyRole: e.target.value })}
                 />
@@ -725,7 +693,7 @@ ${[...lines, ...fks].join(",\n")}
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
-                  placeholder="Explain how Foreign Keys connect tables..."
+                  placeholder="Explain how Foreign Keys connect the tables..."
                   value={explanations.foreignKeyRole}
                   onChange={(e) => setExplanations({ ...explanations, foreignKeyRole: e.target.value })}
                 />
@@ -738,9 +706,9 @@ ${[...lines, ...fks].join(",\n")}
                 <textarea
                   rows={3}
                   style={{ width: "100%" }}
-                  placeholder="Explain potential issues if a Foreign Key is removed..."
-                  value={explanations.removedFkConsequences}
-                  onChange={(e) => setExplanations({ ...explanations, removedFkConsequences: e.target.value })}
+                  placeholder="Explain potential problems like orphan data or lost relationships..."
+                  value={explanations.fkRemovedProblems}
+                  onChange={(e) => setExplanations({ ...explanations, fkRemovedProblems: e.target.value })}
                 />
               </div>
             </div>
